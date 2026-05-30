@@ -17,7 +17,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npx tsc --noEmit
-      - run: npx eslint src/ --ext .ts,.tsx || echo "Linter not configured yet"
+      - run: npx eslint src/ --ext .ts,.tsx
 
   test:
     runs-on: ubuntu-latest
@@ -28,7 +28,7 @@ jobs:
           node-version: 22
           cache: 'npm'
       - run: npm ci
-      - run: npx vitest run || echo "Vitest not configured yet"
+      - run: npx vitest run
 
   build:
     runs-on: ubuntu-latest
