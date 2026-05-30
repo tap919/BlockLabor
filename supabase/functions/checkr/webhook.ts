@@ -1,12 +1,28 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getRequiredEnv } from "../shared/auth.ts";
+import { AppError } from "../shared/errors.ts";
+import { ok, fail } from "../shared/response.ts";
+import { logEvent } from "../shared/logger.ts";
 import { verifyHmacSignature } from "../shared/webhook.ts";
-import { errorResponse, badRequest, internalError } from "../shared/error.ts";
 import { checkIdempotency, markProcessed } from "../shared/idempotency.ts";
 
 Deno.serve(async (req: Request) => {
+  const requestId = crypto.randomUUID();
+  const supabaseUrl = getRequiredEnv("SUPABASE_URL");
+  const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  await logEvent(supabase, requestId, {
+    category: "system",
+    type: "info",
+    message: "Checkr webhook received",
+  });
+
   if (req.method !== "POST") {
-    return badRequest("Method not allowed");
+    return fail(
+      new AppError("BAD_REQUEST", "Method not allowed", 400),
+      requestId,
+    );
   }
 
   try {
@@ -17,22 +33,19 @@ Deno.serve(async (req: Request) => {
     const isValid = await verifyHmacSignature(body, signature, checkrWebhookSecret);
 
     if (!isValid) {
-      return errorResponse(401, "INVALID_SIGNATURE", "Checkr webhook signature verification failed");
+      return fail(
+        new AppError("INVALID_SIGNATURE", "Checkr webhook signature verification failed", 401, false),
+        requestId,
+      );
     }
 
     const payload = JSON.parse(body);
     const webhookId = payload.id || crypto.randomUUID();
     const eventType = payload.type || "unknown";
 
-    const supabaseUrl = getRequiredEnv("SUPABASE_URL");
-    const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     const idempotency = await checkIdempotency(supabase, "checkr", webhookId);
     if (idempotency.exists) {
-      return new Response(JSON.stringify({ success: true, ignored: true }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return ok({ ignored: true });
     }
 
     if (eventType === "report.completed" || eventType === "report.adverse_action") {
@@ -78,11 +91,24 @@ Deno.serve(async (req: Request) => {
       "processed",
     );
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { "Content-Type": "application/json" },
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "success",
+      message: `Checkr webhook processed: ${eventType}`,
     });
+
+    return ok({ processed: true });
   } catch (err) {
-    console.error("Checkr webhook error:", err);
-    return internalError(err instanceof Error ? err.message : "Unknown error");
+    const error = err instanceof Error
+      ? new AppError("INTERNAL_ERROR", err.message, 500, false)
+      : new AppError("INTERNAL_ERROR", "Unknown error", 500, false);
+
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "error",
+      message: `Checkr webhook error: ${error.message}`,
+    });
+
+    return fail(error, requestId);
   }
 });
