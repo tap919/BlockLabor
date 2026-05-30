@@ -1,6 +1,6 @@
 import { Navigation, ViewState } from '../components/Navigation';
 import { HomeView } from '../components/Home';
-import { BookLaborView } from '../components/BookLabor';
+import { BookingPage as BookLaborView } from '../features/booking/BookingPage';
 import { ClientPortalView } from '../components/ClientPortal';
 import { ContractorPortalView } from '../components/ContractorPortal';
 import { StaffDashboardView } from '../components/StaffDashboard';
