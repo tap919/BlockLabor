@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
 );
 
 CREATE TABLE IF NOT EXISTS public.users (
-  id         TEXT PRIMARY KEY,
+  id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   email      TEXT NOT NULL,
   name       TEXT,
   full_name  TEXT,
@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS public.sso_config (
   enabled                BOOLEAN DEFAULT false,
   active_directory_group TEXT,
   last_sync_date         TIMESTAMPTZ,
-  role_mapping           JSONB
+  role_mapping           JSONB,
+  idp_certificate        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS public.partner_vendors (

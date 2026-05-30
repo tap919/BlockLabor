@@ -39,7 +39,7 @@ RETURNS TEXT
 LANGUAGE SQL STABLE
 AS $$
   SELECT COALESCE(
-    (SELECT role FROM public.users WHERE id = auth.uid()::uuid),
+    (SELECT role FROM public.users WHERE id = auth.uid()::text),
     'anonymous'
   );
 $$;
