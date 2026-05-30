@@ -1,3 +1,7 @@
+// DEPRECATED: New code should import AppError from './errors.ts' and ok/fail from './response.ts'
+// This module is kept for backward compatibility with existing edge functions.
+export { AppError } from './errors.ts'
+
 export interface ErrorEnvelope {
   success: false;
   error: {
