@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
         ? err
         : new AppError("INTERNAL_ERROR", err instanceof Error ? err.message : "Unknown error", 500);
 
-    if (!err instanceof AppError || err.status >= 500) {
+    if (!(err instanceof AppError) || err.status >= 500) {
       await supabase.from("integration_events").insert({
         provider: "dropbox_sign",
         event_type: "api_call_failed",
