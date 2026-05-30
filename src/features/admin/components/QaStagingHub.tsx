@@ -5,7 +5,7 @@ import {
   AppWindow, RefreshCw, Layers, Database, Key, Sparkles, Server, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Job, WorkerCandidate, SystemLog, AdminPermissions } from '../shared/types/domain';
+import { Job, WorkerCandidate, SystemLog, AdminPermissions } from '../../../shared/types/domain';
 
 interface QaStagingHubProps {
   jobs: Job[];

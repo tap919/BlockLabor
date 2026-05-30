@@ -1,14 +1,14 @@
 import { Dispatch, SetStateAction } from 'react';
-import { Navigation, ViewState } from '../components/Navigation';
-import { HomeView } from '../components/Home';
+import { Navigation, ViewState } from '../components/common/Navigation';
+import { HomeView } from '../features/landing/components/Home';
 import { BookingPage as BookLaborView } from '../features/booking/BookingPage';
-import { ClientPortalView } from '../components/ClientPortal';
-import { ContractorPortalView } from '../components/ContractorPortal';
-import { StaffDashboardView } from '../components/StaffDashboard';
-import { ServicesView } from '../components/Services';
-import { PricingView } from '../components/Pricing';
-import { AboutView } from '../components/About';
-import { QaStagingHub } from '../components/QaStagingHub';
+import { ClientPortalView } from '../features/jobs/components/ClientPortal';
+import { ContractorPortalView } from '../features/candidates/components/ContractorPortal';
+import { StaffDashboardView } from '../features/dashboard/components/StaffDashboard';
+import { ServicesView } from '../features/landing/components/Services';
+import { PricingView } from '../features/landing/components/Pricing';
+import { AboutView } from '../features/landing/components/About';
+import { QaStagingHub } from '../features/admin/components/QaStagingHub';
 import type { Job, WorkerCandidate, IntegrationSetting, SystemLog, PartnerVendor, IncidentReport, BranchDivision, RateCard, SsoConfig, AdminPermissions } from '../shared/types/domain';
 
 interface AppShellProps {

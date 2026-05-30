@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ViewState } from './components/Navigation';
+import { ViewState } from './components/common/Navigation';
 import { AppShell } from './app/AppShell';
 
 import { 

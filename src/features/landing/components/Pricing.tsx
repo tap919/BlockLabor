@@ -1,4 +1,4 @@
-import { PRICING_BLOCKS } from '../constants';
+import { PRICING_BLOCKS } from '../../../constants';
 import { motion } from 'motion/react';
 import { Check, ShieldCheck, Sparkles, Building2, Key } from 'lucide-react';
 

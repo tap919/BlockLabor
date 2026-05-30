@@ -1,10 +1,10 @@
 import { useState, useMemo, FormEvent, Dispatch, SetStateAction } from 'react';
 import { 
   Job, WorkerCandidate, IntegrationSetting, SystemLog, VerticalType, RequiredCredential, PartnerVendor, IncidentReport 
-} from '../shared/types/domain';
+} from '../../../shared/types/domain';
 import { 
   VERTICAL_WORKFLOWS, PRICING_BLOCKS, CATEGORIES_BY_VERTICAL, VERTICALS
-} from '../constants';
+} from '../../../constants';
 import { 
   LineChart, Sparkles, AlertTriangle, CloudSun, Calendar, Users, 
   DollarSign, CheckSquare, Shield, Clock, Send, Link, CheckCircle, 

@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, ShieldCheck, Clock, Zap } from 'lucide-react';
-import { VERTICALS } from '../constants';
-import { ViewState } from './Navigation';
+import { VERTICALS } from '../../../constants';
+import { ViewState } from '../../../components/common/Navigation';
 import { motion } from 'motion/react';
 
 interface HomeViewProps {
