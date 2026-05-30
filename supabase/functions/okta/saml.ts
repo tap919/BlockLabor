@@ -46,6 +46,62 @@ Deno.serve(async (req: Request) => {
         throw new AppError("BAD_REQUEST", "SAMLResponse is required", 400);
       }
 
+      // Verify SAML response signature
+      const samlConfig = await supabase
+        .from("sso_config")
+        .select("idp_certificate")
+        .eq("provider", "okta")
+        .maybeSingle();
+
+      if (!samlConfig?.data?.idp_certificate) {
+        throw new AppError('SAML_CONFIG_MISSING', 'IdP certificate not configured for SAML verification', 500, false);
+      }
+
+      // Decode the SAML response to get the signature
+      const decodedSaml = atob(samlResponse);
+
+      // Extract the SignedInfo element for verification
+      const signedInfoMatch = decodedSaml.match(/<ds:SignedInfo>([\s\S]*?)<\/ds:SignedInfo>/);
+      if (!signedInfoMatch) {
+        throw new AppError('INVALID_SAML', 'No SignedInfo element found in SAML response', 400, false);
+      }
+
+      // Extract the signature value
+      const signatureValueMatch = decodedSaml.match(/<ds:SignatureValue>([\s\S]*?)<\/ds:SignatureValue>/);
+      if (!signatureValueMatch) {
+        throw new AppError('INVALID_SAML', 'No SignatureValue found in SAML response', 400, false);
+      }
+
+      // Verify the signature against the IdP certificate
+      const certPem = samlConfig.data.idp_certificate
+        .replace(/-----BEGIN CERTIFICATE-----/, '')
+        .replace(/-----END CERTIFICATE-----/, '')
+        .replace(/\s/g, '');
+
+      const certDer = Uint8Array.from(atob(certPem), c => c.charCodeAt(0));
+
+      const cert = await crypto.subtle.importKey(
+        'spki',
+        certDer,
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        false,
+        ['verify'],
+      );
+
+      const signedInfoDecoder = new TextEncoder();
+      const sigValue = Uint8Array.from(atob(signatureValueMatch[1]), c => c.charCodeAt(0));
+
+      const signatureValid = await crypto.subtle.verify(
+        'RSASSA-PKCS1-v1_5',
+        cert,
+        sigValue,
+        signedInfoDecoder.encode(signedInfoMatch[1]),
+      );
+
+      if (!signatureValid) {
+        throw new AppError('INVALID_SAML_SIGNATURE', 'SAML response signature verification failed', 401, false);
+      }
+
       const decoded = atob(samlResponse);
       const emailMatch = decoded.match(/<saml2:Attribute Name="Email"[^>]*>.*?<saml2:AttributeValue[^>]*>([^<]+)<\/saml2:AttributeValue>/s);
       const nameMatch = decoded.match(/<saml2:Attribute Name="FirstName"[^>]*>.*?<saml2:AttributeValue[^>]*>([^<]+)<\/saml2:AttributeValue>/s);
