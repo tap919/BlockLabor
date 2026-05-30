@@ -1,4 +1,4 @@
-import { Job, WorkerCandidate, IntegrationSetting, SystemLog, PartnerVendor, IncidentReport, BranchDivision, RateCard, SsoConfig, AdminPermissions } from './types';
+import { Job, WorkerCandidate, IntegrationSetting, SystemLog, PartnerVendor, IncidentReport, BranchDivision, RateCard, SsoConfig, AdminPermissions } from '../../shared/types/domain';
 
 export const mockJobs: Job[] = [
   {

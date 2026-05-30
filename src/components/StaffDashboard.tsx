@@ -1,7 +1,7 @@
 import { useState, useMemo, FormEvent, Dispatch, SetStateAction } from 'react';
 import { 
   Job, WorkerCandidate, IntegrationSetting, SystemLog, VerticalType, RequiredCredential, PartnerVendor, IncidentReport 
-} from '../types';
+} from '../shared/types/domain';
 import { 
   VERTICAL_WORKFLOWS, PRICING_BLOCKS, CATEGORIES_BY_VERTICAL, VERTICALS
 } from '../constants';

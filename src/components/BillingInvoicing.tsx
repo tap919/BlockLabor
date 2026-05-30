@@ -1,4 +1,4 @@
-import { Job, WorkerCandidate } from '../types';
+import { Job, WorkerCandidate } from '../shared/types/domain';
 import React, { useMemo, useState } from 'react';
 import { 
   FileText, DollarSign, Calendar, Clock, RotateCw, Send, CheckCircle, 

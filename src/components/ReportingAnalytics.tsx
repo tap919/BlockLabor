@@ -1,4 +1,4 @@
-import { Job, WorkerCandidate } from '../types';
+import { Job, WorkerCandidate } from '../shared/types/domain';
 import { useMemo, useState } from 'react';
 import { 
   Users, TrendingUp, Clock, AlertOctagon, RefreshCw, BarChart2, Star, 

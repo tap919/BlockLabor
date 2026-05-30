@@ -1,4 +1,4 @@
-import { CustomVerticalWorkflow, RequiredCredential } from './types';
+import { CustomVerticalWorkflow, RequiredCredential } from './shared/types/domain';
 
 export const PRICING_BLOCKS = [
   { id: '1-hour', label: '1 Hour Block', description: 'Quick task relief.', clientRate: '$35', contractorRate: '$25', value: 25, chargeVal: 35 },

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Job, WorkerCandidate, IncidentReport, BranchDivision, RateCard } from '../types';
+import { Job, WorkerCandidate, IncidentReport, BranchDivision, RateCard } from '../shared/types/domain';
 import { VERTICAL_WORKFLOWS } from '../constants';
 import { motion } from 'motion/react';
 import { 

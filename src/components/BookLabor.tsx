@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { PRICING_BLOCKS, VERTICALS, CATEGORIES_BY_VERTICAL, VERTICAL_WORKFLOWS } from '../constants';
-import { Job, VerticalType, BlockType, JobChecklistItem } from '../types';
+import { Job, VerticalType, BlockType, JobChecklistItem } from '../shared/types/domain';
 import { motion } from 'motion/react';
 import { ShieldAlert, FileSignature, CheckCircle, HelpCircle } from 'lucide-react';
 

@@ -1,5 +1,5 @@
 import { useState, DragEvent, ChangeEvent, FormEvent } from 'react';
-import { Job, WorkerCandidate, IncidentReport } from '../types';
+import { Job, WorkerCandidate, IncidentReport } from '../shared/types/domain';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MapPin, DollarSign, Clock, ShieldCheck, CheckSquare, 
