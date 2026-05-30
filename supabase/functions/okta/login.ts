@@ -1,10 +1,24 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getRequiredEnv } from "../shared/auth.ts";
-import { errorResponse, badRequest, internalError } from "../shared/error.ts";
-import { getOptionalEnv } from "../shared/auth.ts";
+import { getRequiredEnv, getOptionalEnv } from "../shared/auth.ts";
+import { AppError } from "../shared/errors.ts";
+import { logEvent } from "../shared/logger.ts";
+import { fail } from "../shared/response.ts";
 
 Deno.serve(async (req: Request) => {
+  const requestId = crypto.randomUUID();
+  const supabase = createClient(
+    getRequiredEnv("SUPABASE_URL"),
+    getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+  );
+
   try {
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "info",
+      message: "Okta login started",
+      meta: { function: "login" },
+    });
+
     const url = new URL(req.url);
 
     if (req.method === "GET" && url.pathname.endsWith("/authorize")) {
@@ -27,7 +41,7 @@ Deno.serve(async (req: Request) => {
       const state = url.searchParams.get("state");
 
       if (!code) {
-        return badRequest("Authorization code is required");
+        throw new AppError("BAD_REQUEST", "Authorization code is required", 400);
       }
 
       const oktaDomain = getRequiredEnv("OKTA_DOMAIN");
@@ -54,7 +68,7 @@ Deno.serve(async (req: Request) => {
       const tokenData = await tokenResponse.json();
 
       if (!tokenResponse.ok) {
-        return errorResponse(401, "TOKEN_EXCHANGE_FAILED", "Failed to exchange authorization code");
+        throw new AppError("TOKEN_EXCHANGE_FAILED", "Failed to exchange authorization code", 401, false);
       }
 
       const idToken = tokenData.id_token;
@@ -64,10 +78,6 @@ Deno.serve(async (req: Request) => {
       const email = claims.email;
       const name = claims.name || claims.preferred_username || email;
       const oktaGroups: string[] = claims.groups || [];
-
-      const supabaseUrl = getRequiredEnv("SUPABASE_URL");
-      const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-      const supabase = createClient(supabaseUrl, supabaseKey);
 
       const { data: ssoConfig } = await supabase
         .from("sso_config")
@@ -133,9 +143,19 @@ Deno.serve(async (req: Request) => {
       return Response.redirect(logoutUrl.toString(), 302);
     }
 
-    return badRequest("Not found");
+    throw new AppError("BAD_REQUEST", "Not found", 404);
   } catch (err) {
-    console.error("Okta login error:", err);
-    return internalError(err instanceof Error ? err.message : "Unknown error");
+    const error = err instanceof AppError
+      ? err
+      : new AppError("INTERNAL_ERROR", err instanceof Error ? err.message : "Unknown error", 500);
+
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "error",
+      message: `${error.code}: ${error.message}`,
+      meta: { function: "login", retryable: error.retryable },
+    });
+
+    return fail(error, requestId);
   }
 });
