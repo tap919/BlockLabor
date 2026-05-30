@@ -1,8 +1,9 @@
 import { Dispatch, SetStateAction } from 'react';
+import { RateCard } from '../../../shared/types/domain';
 
 export interface RateCardManagerProps {
-  rateCards: any[];
-  setRateCards: Dispatch<SetStateAction<any[]>>;
+  rateCards: RateCard[];
+  setRateCards: Dispatch<SetStateAction<RateCard[]>>;
 }
 
 export function RateCardManager({ rateCards, setRateCards }: RateCardManagerProps) {

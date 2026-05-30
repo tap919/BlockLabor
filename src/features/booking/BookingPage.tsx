@@ -7,14 +7,23 @@ import { RateCardSummary } from './RateCardSummary';
 import { CompliancePanel } from './CompliancePanel';
 import { BookingSuccessCard } from './BookingSuccessCard';
 import { calculateJobData } from './booking.utils';
+import { BranchDivision, RateCard, VerticalType, BlockType } from '../../shared/types/domain';
 
-export function BookingPage({ onBookJob, setView, isEnterprise = false, branches = [], rateCards = [] }: any) {
+interface BookingPageProps {
+  onBookJob: (job: any) => void;
+  setView: (view: string) => void;
+  isEnterprise?: boolean;
+  branches?: BranchDivision[];
+  rateCards?: RateCard[];
+}
+
+export function BookingPage({ onBookJob, setView, isEnterprise = false, branches = [], rateCards = [] }: BookingPageProps) {
   const [values, setValues] = useState({
     businessName: '',
     location: '',
-    selectedVertical: 'Light Industrial' as any,
+    selectedVertical: 'Light Industrial' as VerticalType,
     selectedCategory: '',
-    selectedBlockId: '4-hour' as any,
+    selectedBlockId: '4-hour' as BlockType,
     selectedBranch: branches?.[0]?.name || '',
     startWindow: '',
     skillsText: ''
@@ -31,7 +40,7 @@ export function BookingPage({ onBookJob, setView, isEnterprise = false, branches
   }, [values.selectedVertical]);
 
   const activeWorkflow = VERTICAL_WORKFLOWS.find(v => v.vertical === values.selectedVertical) || VERTICAL_WORKFLOWS[0];
-  const activeRateCard = rateCards?.find((rc: any) => rc.vertical === values.selectedVertical && rc.category === values.selectedCategory);
+  const activeRateCard = rateCards?.find((rc: RateCard) => rc.vertical === values.selectedVertical && rc.category === values.selectedCategory);
   const activeBlock = PRICING_BLOCKS.find(b => b.id === values.selectedBlockId) || PRICING_BLOCKS[1];
 
   const handleSubmit = (e: FormEvent) => {
@@ -76,7 +85,7 @@ export function BookingPage({ onBookJob, setView, isEnterprise = false, branches
           >
             <VerticalSelector 
               selectedVertical={values.selectedVertical} 
-              onSelect={(v: any) => setValues(prev => ({ ...prev, selectedVertical: v }))} 
+              onSelect={(v: VerticalType) => setValues(prev => ({ ...prev, selectedVertical: v }))} 
             />
             
             <div className="mt-8">

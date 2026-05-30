@@ -1,8 +1,9 @@
 import { Dispatch, SetStateAction } from 'react';
+import { AdminPermissions } from '../../../shared/types/domain';
 
 export interface PermissionsManagerProps {
-  permissions: any[];
-  setPermissions: Dispatch<SetStateAction<any[]>>;
+  permissions: AdminPermissions[];
+  setPermissions: Dispatch<SetStateAction<AdminPermissions[]>>;
 }
 
 export function PermissionsManager({ permissions, setPermissions }: PermissionsManagerProps) {
