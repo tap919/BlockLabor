@@ -1,0 +1,6 @@
+{
+  "name": "BlockLabor Marketplace",
+  "description": "On-demand block-based labor collective connecting businesses with independent contractors.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
