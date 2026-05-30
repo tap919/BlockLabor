@@ -49,7 +49,7 @@ Deno.serve(async (req: Request) => {
           },
         ],
         client_id: dropboxSignClientId,
-        test_mode: true,
+        test_mode: Deno.env.get("DROPBOX_SIGN_TEST_MODE") === "true",
       }),
     });
 
