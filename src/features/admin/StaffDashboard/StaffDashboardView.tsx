@@ -13,9 +13,9 @@ import {
   Layers, Settings, Award, Building2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ReportingAnalytics } from '../ReportingAnalytics';
-import { MarginTracker } from '../MarginTracker';
-import { BillingInvoicing } from '../BillingInvoicing';
+import { ReportingAnalytics } from '../../../components/ReportingAnalytics';
+import { MarginTracker } from '../../../components/MarginTracker';
+import { BillingInvoicing } from '../../../components/BillingInvoicing';
 
 import { StaffOverviewPanel } from './StaffOverviewPanel';
 import { JobsQueue } from './JobsQueue';

@@ -9,7 +9,7 @@ interface CandidatesStore {
 }
 
 export const useCandidatesStore = create<CandidatesStore>((set) => ({
-  candidates: candidateService.getAll(),
+  candidates: [],
   setCandidates: (candidates) => set({ candidates }),
   updateCandidate: (id, updates) =>
     set((state) => ({

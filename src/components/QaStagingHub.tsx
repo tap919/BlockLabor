@@ -1,4 +1,4 @@
-import { useState, useRef, Dispatch, SetStateAction, DragEvent, ChangeEvent } from 'react';
+import { useState, useRef, DragEvent, ChangeEvent } from 'react';
 import { 
   Play, RotateCw, CheckCircle2, AlertTriangle, XCircle, Terminal, 
   Upload, Shield, FileText, Smartphone, Users, FileSignature, 
@@ -9,15 +9,15 @@ import { Job, WorkerCandidate, SystemLog, AdminPermissions } from '../shared/typ
 
 interface QaStagingHubProps {
   jobs: Job[];
-  setJobs: Dispatch<SetStateAction<Job[]>>;
+  setJobs: (jobs: Job[]) => void;
   candidates: WorkerCandidate[];
-  setCandidates: Dispatch<SetStateAction<WorkerCandidate[]>>;
+  setCandidates: (candidates: WorkerCandidate[]) => void;
   logs: SystemLog[];
   onAddLog: (category: string, message: string, type?: 'info' | 'success' | 'warning' | 'sms') => void;
   isEnterprise: boolean;
   setIsEnterprise: (val: boolean) => void;
   permissions: AdminPermissions[];
-  setPermissions: Dispatch<SetStateAction<AdminPermissions[]>>;
+  setPermissions: (permissions: AdminPermissions[]) => void;
 }
 
 export interface TestCase {
@@ -327,13 +327,13 @@ export function QaStagingHub({
     switch (testId) {
       case 'e2e-03': // Recruiter promotion
         // Jeremy Croft becomes active worker
-        setCandidates(prev => prev.map(cand => {
-          if (cand.id === 'c-005') { // Jeremy
+        setCandidates(candidates.map(cand => {
+          if (cand.id === 'c-005') {
             return {
               ...cand,
-              status: 'active',
-              backgroundCheckStatus: 'passed',
-              eSignStatus: 'signed',
+              status: 'active' as const,
+              backgroundCheckStatus: 'passed' as const,
+              eSignStatus: 'signed' as const,
               verifiedCredentials: ['diploma', 'clerical_typing_audit'],
               profileUpdated: true
             };
@@ -372,15 +372,15 @@ export function QaStagingHub({
           shiftEndTime: '18:00',
           branchName: 'Staging HQ'
         };
-        setJobs(prev => [newStagingJob, ...prev]);
+        setJobs([newStagingJob, ...jobs]);
         onAddLog('scheduler', 'QA Staging dispatched automated labor Block: Apex QA Auto Packing ($130 bill rate).', 'info');
         break;
 
       case 'e2e-05': // Worker confirms
         // Force confirm of job-101 or similar open job to accepted
-        setJobs(prev => prev.map(job => {
+        setJobs(jobs.map(job => {
           if (job.id === 'job-101') {
-            return { ...job, status: 'accepted', contractorId: 'c-001' };
+            return { ...job, status: 'accepted' as const, contractorId: 'c-001' };
           }
           return job;
         }));

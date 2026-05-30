@@ -9,7 +9,7 @@ interface VendorsStore {
 }
 
 export const useVendorsStore = create<VendorsStore>((set) => ({
-  vendors: vendorService.getAll(),
+  vendors: [],
   addVendor: (vendor) => set((state) => ({ vendors: [...state.vendors, vendor] })),
   updateVendorStatus: (id, status) =>
     set((state) => ({

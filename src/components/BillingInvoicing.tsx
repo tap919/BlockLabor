@@ -282,7 +282,7 @@ export function BillingInvoicing({ jobs, candidates, onAddLog, onChangeJobStatus
                       <span className="text-[9px] text-zinc-500">Hours worked exceeding statutory regular 40h block (1.5x Multiplier)</span>
                     </div>
                     <div className="text-center">{selectedInvoice.otHours} hrs</div>
-                    <div className="text-center">${Math.round(selectedInvoice.billRate * 1.5 * 10) / 10}</div>
+                    <div className="text-center">${Math.round((selectedInvoice.billRate ?? 0) * 1.5 * 10) / 10}</div>
                     <div className="text-right text-white">${selectedInvoice.otBill.toLocaleString()}</div>
                   </div>
                 )}

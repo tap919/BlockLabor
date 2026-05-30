@@ -28,7 +28,7 @@ interface StaffDashboardProps {
   onChangeJobStatus: (jobId: string, status: Job['status'], contractorId?: string, extraUpdates?: Partial<Job>) => void;
   onUpdateCandidate: (candidateId: string, updates: Partial<WorkerCandidate>) => void;
   onToggleIntegration: (integrationId: string) => void;
-  onAddLog: (category: SystemLog['category'], message: string, type?: SystemLog['type']) => void;
+  onAddLog: (category: string, message: string, type?: string) => void;
   onAddIncident?: (newIncident: IncidentReport) => void;
   onUpdateIncidentStatus?: (id: string, status: IncidentReport['status'], resolutionNotes?: string) => void;
   onAddPartnerVendor?: (vendor: PartnerVendor) => void;
@@ -1529,8 +1529,8 @@ Contractors operate as independent agents under mutual 1099 terms. Please comple
                             responseText = `*Error: Candidate select is required to perform an AI Screening check. Please select a candidate above.*`;
                           } else {
                             const isMatchedVertical = targetCand.verticals.includes(targetJob?.vertical || 'Light Industrial');
-                            const matchPercent = isMatchedVertical ? targetCand.reliabilityScore : Math.max(50, (targetCand.reliabilityScore || 90) - 25);
-                            const missingDocs = targetCand.documents.filter(d => d.status !== 'verified').map(d => d.type);
+                            const matchPercent = isMatchedVertical ? (targetCand.reliabilityScore ?? 90) : Math.max(50, ((targetCand.reliabilityScore ?? 90) - 25));
+                            const missingDocs = (targetCand.documents ?? []).filter(d => d.status !== 'verified').map(d => d.type);
                             
                             responseText = `# AI CANDIDATE SCREENING REPORT
 **CANDIDATE:** ${targetCand.name} (Reliability Score: ${targetCand.reliabilityScore || 95}%)
@@ -1549,7 +1549,7 @@ Contractors operate as independent agents under mutual 1099 terms. Please comple
 - **Background Screening Status:** \`${targetCand.backgroundCheckStatus.toUpperCase()}\`
 - **DocuSign 1099 Handbook State:** \`${targetCand.eSignStatus.toUpperCase()}\`
 - **Expired Credentials Detected:** 
-  * ${targetCand.documents.find(d => d.status === 'expired')?.name || 'None detected. Normal compliant status.'} (${targetCand.documents.find(d => d.status === 'expired')?.type || ''})
+  * ${(targetCand.documents ?? []).find(d => d.status === 'expired')?.name || 'None detected. Normal compliant status.'} (${(targetCand.documents ?? []).find(d => d.status === 'expired')?.type || ''})
 ${missingDocs.length > 0 ? `- **Backoffice Gaps to Settle prior to dispatch:** ${missingDocs.join(', ')}` : ''}
 ${copilotInstruction ? `\n- **Additional instruction guidelines checked:** ${copilotInstruction}` : ''}
 

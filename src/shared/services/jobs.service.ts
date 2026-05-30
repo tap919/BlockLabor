@@ -1,20 +1,20 @@
 import { supabase } from '../lib/supabaseClient'
-import type { Job } from '../types/domain'
+import type { Job, VerticalType, BlockType } from '../types/domain'
 
 function mapJob(row: Record<string, unknown>): Job {
   return {
     id: row.id as string,
     businessName: row.business_name as string,
-    vertical: row.vertical as string,
+    vertical: row.vertical as VerticalType,
     category: row.category as string,
-    blockType: row.block_type as string,
+    blockType: row.block_type as BlockType,
     status: row.status as Job['status'],
-    startWindow: row.start_window as string | undefined,
-    location: row.location as string | undefined,
+    startWindow: (row.start_window as string) ?? '',
+    location: (row.location as string) ?? '',
     locationName: row.location_name as string | undefined,
-    requiredSkills: row.required_skills as string[] | undefined,
-    payout: row.payout as number | undefined,
-    charge: row.charge as number | undefined,
+    requiredSkills: (row.required_skills as string[]) ?? [],
+    payout: (row.payout as number) ?? 0,
+    charge: (row.charge as number) ?? 0,
     billRate: row.bill_rate as number | undefined,
     payRate: row.pay_rate as number | undefined,
     markup: row.markup as number | undefined,
@@ -33,8 +33,7 @@ function mapJob(row: Record<string, unknown>): Job {
     swapRequested: row.swap_requested as boolean | undefined,
     dropRequested: row.drop_requested as boolean | undefined,
     incidentsCount: row.incidents_count as number | undefined,
-    createdAt: row.created_at as string | undefined,
-    branchId: row.branch_id as string | undefined,
+    createdAt: (row.created_at as string) ?? new Date().toISOString(),
     contractorId: row.contractor_id as string | undefined,
     recruiterId: row.recruiter_id as string | undefined,
     vendorId: row.vendor_id as string | undefined,
@@ -43,6 +42,7 @@ function mapJob(row: Record<string, unknown>): Job {
     invoiceAdjustmentNotes: row.invoice_adjustment_notes as string | undefined,
     payrollExpenses: row.payroll_expenses as number | undefined,
     payrollDeductions: row.payroll_deductions as number | undefined,
+    checklist: [],
   }
 }
 

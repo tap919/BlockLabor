@@ -8,7 +8,7 @@ interface IntegrationsStore {
 }
 
 export const useIntegrationsStore = create<IntegrationsStore>((set) => ({
-  integrations: integrationService.getAll(),
+  integrations: [],
   toggleIntegration: (id) =>
     set((state) => ({
       integrations: state.integrations.map((node) =>

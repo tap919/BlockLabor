@@ -1,20 +1,19 @@
 import { supabase } from '../lib/supabaseClient'
-import type { PartnerVendor } from '../types/domain'
+import type { PartnerVendor, VerticalType } from '../types/domain'
 
 function mapVendor(row: Record<string, unknown>): PartnerVendor {
   return {
     id: row.id as string,
     name: row.name as string,
-    contactName: row.contact_name as string | undefined,
-    email: row.email as string | undefined,
-    phone: row.phone as string | undefined,
-    verticals: row.verticals as string[] | undefined,
-    markupShare: row.markup_share as number | undefined,
+    contactName: (row.contact_name as string) ?? '',
+    email: (row.email as string) ?? '',
+    phone: (row.phone as string) ?? '',
+    verticals: (row.verticals as VerticalType[]) ?? [],
+    markupShare: (row.markup_share as number) ?? 0,
     status: row.status as PartnerVendor['status'],
-    assignedJobsCount: row.assigned_jobs_count as number | undefined,
-    insuranceExpiry: row.insurance_expiry as string | undefined,
-    taxId: row.tax_id as string | undefined,
-    createdAt: row.created_at as string | undefined,
+    assignedJobsCount: (row.assigned_jobs_count as number) ?? 0,
+    insuranceExpiry: (row.insurance_expiry as string) ?? '',
+    taxId: (row.tax_id as string) ?? '',
   }
 }
 

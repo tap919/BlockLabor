@@ -9,7 +9,7 @@ interface IncidentsStore {
 }
 
 export const useIncidentsStore = create<IncidentsStore>((set) => ({
-  incidents: incidentService.getAll(),
+  incidents: [],
   addIncident: (incident) => set((state) => ({ incidents: [incident, ...state.incidents] })),
   updateIncidentStatus: (id, status, resolutionNotes) =>
     set((state) => ({

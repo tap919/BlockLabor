@@ -82,7 +82,7 @@ export default function App() {
       rateCards={rateCards}
       ssoConfig={ssoConfig}
       permissions={permissions}
-      handleAddLog={addLog}
+      handleAddLog={(category, message, type) => addLog(category as any, message, type as any)}
       handleBookJob={handleBookJob}
       handleChangeJobStatus={updateJobStatus}
       handleUpdateCandidate={updateCandidate}

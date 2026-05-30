@@ -4,17 +4,17 @@ import type { IncidentReport } from '../types/domain'
 function mapIncident(row: Record<string, unknown>): IncidentReport {
   return {
     id: row.id as string,
-    jobId: row.job_id as string | undefined,
+    jobId: (row.job_id as string) ?? '',
     businessName: row.business_name as string,
     contractorId: row.contractor_id as string | undefined,
     contractorName: row.contractor_name as string | undefined,
     reportedBy: row.reported_by as IncidentReport['reportedBy'],
     category: row.category as IncidentReport['category'],
     severity: row.severity as IncidentReport['severity'],
-    description: row.description as string | undefined,
+    description: (row.description as string) ?? '',
     status: row.status as IncidentReport['status'],
     resolutionNotes: row.resolution_notes as string | undefined,
-    createdAt: row.created_at as string | undefined,
+    timestamp: (row.created_at as string) ?? new Date().toISOString(),
   }
 }
 

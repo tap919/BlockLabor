@@ -6,6 +6,7 @@ interface JobsStore {
   jobs: Job[];
   isLoading: boolean;
   error: string | null;
+  setJobs: (jobs: Job[]) => void;
   fetchJobs: () => Promise<void>;
   addJob: (job: Omit<Job, 'id' | 'createdAt'>) => Promise<void>;
   updateJobStatus: (id: string, status: Job['status'], contractorId?: string, extraUpdates?: Partial<Job>) => Promise<void>;
@@ -15,6 +16,7 @@ export const useJobsStore = create<JobsStore>((set) => ({
   jobs: [],
   isLoading: false,
   error: null,
+  setJobs: (jobs) => set({ jobs }),
   fetchJobs: async () => {
     set({ isLoading: true, error: null });
     try {
@@ -67,7 +69,7 @@ export const useJobsStore = create<JobsStore>((set) => ({
       }
       const { error } = await (await import('../../shared/lib/supabaseClient')).supabase
         .from('jobs')
-        .update(updates)
+        .update(updates as never)
         .eq('id', id);
       if (error) throw error;
       set((state) => ({
