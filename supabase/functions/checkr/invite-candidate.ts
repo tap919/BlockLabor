@@ -1,129 +1,153 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-import { getRequiredEnv } from "../shared/auth.ts";
-import { errorResponse, badRequest, internalError } from "../shared/error.ts";
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import { AppError } from '../shared/errors.ts'
+import { getRequiredEnv } from '../shared/auth.ts'
+import { logEvent } from '../shared/logger.ts'
+import { ok, fail } from '../shared/response.ts'
+import { withRetry } from '../shared/retry.ts'
 
 Deno.serve(async (req: Request) => {
-  if (req.method !== "POST") {
-    return badRequest("Method not allowed");
-  }
+  const requestId = crypto.randomUUID()
+  const supabase = createClient(
+    getRequiredEnv('SUPABASE_URL'),
+    getRequiredEnv('SUPABASE_SERVICE_ROLE_KEY'),
+  )
 
   try {
-    const { candidateId } = await req.json();
+    await logEvent(supabase, requestId, {
+      category: 'system',
+      type: 'info',
+      message: 'Checkr invite-candidate started',
+      meta: { function: 'invite-candidate' },
+    })
+
+    if (req.method !== 'POST') {
+      throw new AppError('BAD_REQUEST', 'Method not allowed', 400)
+    }
+
+    const { candidateId } = await req.json()
 
     if (!candidateId) {
-      return badRequest("candidateId is required");
+      throw new AppError('BAD_REQUEST', 'candidateId is required', 400)
     }
-
-    const supabaseUrl = getRequiredEnv("SUPABASE_URL");
-    const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: candidate, error: candidateError } = await supabase
-      .from("candidates")
-      .select("id, first_name, last_name, email, phone")
-      .eq("id", candidateId)
-      .single();
+      .from('candidates')
+      .select('id, first_name, last_name, email, phone')
+      .eq('id', candidateId)
+      .single()
 
     if (candidateError || !candidate) {
-      return errorResponse(404, "CANDIDATE_NOT_FOUND", "Candidate not found");
+      throw new AppError('NOT_FOUND', 'Candidate not found', 404, false, { candidateId })
     }
 
-    const checkrApiKey = getRequiredEnv("CHECKR_API_KEY");
+    const checkrApiKey = getRequiredEnv('CHECKR_API_KEY')
 
-    const checkrCandidateResponse = await fetch("https://api.checkr.com/v1/candidates", {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${checkrApiKey}:`)}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        first_name: candidate.first_name,
-        last_name: candidate.last_name,
-        email: candidate.email,
-        phone: candidate.phone || "",
-        work_locations: [],
-      }),
-    });
+    const checkrCandidate = await withRetry(async () => {
+      const res = await fetch('https://api.checkr.com/v1/candidates', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${btoa(`${checkrApiKey}:`)}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          first_name: candidate.first_name,
+          last_name: candidate.last_name,
+          email: candidate.email,
+          phone: candidate.phone || '',
+          work_locations: [],
+        }),
+      })
 
-    const checkrCandidate = await checkrCandidateResponse.json();
+      const data = await res.json()
 
-    if (!checkrCandidateResponse.ok) {
-      await supabase.from("integration_events").insert({
-        provider: "checkr",
-        event_type: "api_call_failed",
-        external_id: null,
-        object_type: "candidate",
-        object_id: candidateId,
-        status: "failed",
-        payload: { error: checkrCandidate },
-        attempts: 1,
-        last_error: checkrCandidate.error || "Unknown Checkr API error",
-      });
+      if (res.status === 401) {
+        throw new AppError('INVALID_CREDENTIALS', 'Checkr auth failed', 401, false)
+      }
+      if (res.status === 429) {
+        throw new AppError('RATE_LIMITED', 'Checkr rate limit hit', 503, true)
+      }
+      if (res.status >= 500) {
+        throw new AppError('UPSTREAM_ERROR', 'Checkr server error', 502, true)
+      }
+      if (!res.ok) {
+        throw new AppError('BAD_PROVIDER_RESPONSE', data.error || 'Checkr API error', 502, false)
+      }
 
-      return internalError(`Checkr API error: ${checkrCandidate.error || "Unknown"}`);
-    }
+      return data
+    })
 
-    const checkrCandidateId = checkrCandidate.id;
+    const checkrCandidateId = checkrCandidate.id
 
-    const reportResponse = await fetch("https://api.checkr.com/v1/reports", {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${checkrApiKey}:`)}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        candidate_id: checkrCandidateId,
-        package: "driver_pro", // Default package for staffing platform
-      }),
-    });
+    const report = await withRetry(async () => {
+      const res = await fetch('https://api.checkr.com/v1/reports', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${btoa(`${checkrApiKey}:`)}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          candidate_id: checkrCandidateId,
+          package: 'driver_pro',
+        }),
+      })
 
-    const report = await reportResponse.json();
+      const data = await res.json()
 
-    if (!reportResponse.ok) {
-      await supabase.from("integration_events").insert({
-        provider: "checkr",
-        event_type: "api_call_failed",
-        external_id: checkrCandidateId,
-        object_type: "candidate",
-        object_id: candidateId,
-        status: "failed",
-        payload: { error: report },
-        attempts: 1,
-        last_error: report.error || "Failed to create Checkr report",
-      });
+      if (res.status === 401) {
+        throw new AppError('INVALID_CREDENTIALS', 'Checkr auth failed', 401, false)
+      }
+      if (res.status === 429) {
+        throw new AppError('RATE_LIMITED', 'Checkr rate limit hit', 503, true)
+      }
+      if (res.status >= 500) {
+        throw new AppError('UPSTREAM_ERROR', 'Checkr server error', 502, true)
+      }
+      if (!res.ok) {
+        throw new AppError('BAD_PROVIDER_RESPONSE', data.error || 'Failed to create Checkr report', 502, false)
+      }
 
-      return internalError(`Checkr report error: ${report.error || "Unknown"}`);
-    }
+      return data
+    })
 
-    await supabase.from("integration_events").insert({
-      provider: "checkr",
-      event_type: "background_check_invited",
+    await supabase.from('integration_events').insert({
+      provider: 'checkr',
+      event_type: 'background_check_invited',
       external_id: checkrCandidateId,
-      object_type: "candidate",
+      object_type: 'candidate',
       object_id: candidateId,
-      status: "pending",
+      status: 'pending',
       payload: { candidate: checkrCandidate, report },
       attempts: 1,
-    });
+    })
 
     await supabase
-      .from("candidates")
+      .from('candidates')
       .update({
-        background_check_status: "pending",
+        background_check_status: 'pending',
         background_check_id: checkrCandidateId,
       })
-      .eq("id", candidateId);
+      .eq('id', candidateId)
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        checkr_candidate_id: checkrCandidateId,
-        report_id: report.id,
-      }),
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch (err) {
-    console.error("Checkr invite-candidate error:", err);
-    return internalError(err instanceof Error ? err.message : "Unknown error");
+    await logEvent(supabase, requestId, {
+      category: 'system',
+      type: 'success',
+      message: `Checkr invite-candidate completed: ${candidateId}`,
+      meta: { function: 'invite-candidate', checkrCandidateId, reportId: report.id },
+    })
+
+    return ok({ requestId, checkr_candidate_id: checkrCandidateId, report_id: report.id })
+  } catch (error) {
+    const err = error instanceof AppError
+      ? error
+      : new AppError('UNHANDLED_ERROR', error instanceof Error ? error.message : 'Unknown error', 500)
+
+    await logEvent(supabase, requestId, {
+      category: 'system',
+      type: err.retryable ? 'warning' : 'error',
+      message: `${err.code}: ${err.message}`,
+      meta: { function: 'invite-candidate', retryable: err.retryable },
+    })
+
+    return fail(err, requestId)
   }
-});
+})
