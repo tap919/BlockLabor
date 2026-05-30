@@ -13,6 +13,9 @@ export async function withRetry<T>(
       if (err instanceof AppError && !err.retryable) {
         throw err
       }
+      if (!(err instanceof AppError)) {
+        throw err
+      }
       if (i < attempts - 1) {
         await new Promise((r) => setTimeout(r, 2 ** i * 500 + Math.random() * 300))
       }

@@ -103,7 +103,7 @@ Deno.serve(async (req: Request) => {
       return data
     })
 
-    const resultingQbId = result.Employee?.Id || result.Id
+    const resultingQbId = result.Employee?.Id ?? result.Id
 
     await supabase.from('integration_events').insert({
       provider: 'quickbooks',
