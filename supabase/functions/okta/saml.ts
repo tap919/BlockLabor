@@ -1,13 +1,26 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getRequiredEnv } from "../shared/auth.ts";
-import { errorResponse, badRequest, internalError } from "../shared/error.ts";
-import { getOptionalEnv } from "../shared/auth.ts";
+import { getRequiredEnv, getOptionalEnv } from "../shared/auth.ts";
+import { AppError } from "../shared/errors.ts";
+import { logEvent } from "../shared/logger.ts";
+import { fail } from "../shared/response.ts";
+
+const supabaseUrl = getRequiredEnv("SUPABASE_URL");
+const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 Deno.serve(async (req: Request) => {
+  const requestId = crypto.randomUUID();
+
   try {
     const url = new URL(req.url);
 
     if (req.method === "GET" && url.pathname.endsWith("/metadata")) {
+      await logEvent(supabase, requestId, {
+        category: "system",
+        type: "info",
+        message: "Okta SAML metadata request",
+      });
+
       const oktaDomain = getRequiredEnv("OKTA_DOMAIN");
       const metadataUrl = `https://${oktaDomain}/app/saml/metadata`;
 
@@ -20,11 +33,17 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === "POST" && url.pathname.endsWith("/acs")) {
+      await logEvent(supabase, requestId, {
+        category: "system",
+        type: "info",
+        message: "Okta SAML ACS callback received",
+      });
+
       const formData = await req.formData();
       const samlResponse = formData.get("SAMLResponse") as string | null;
 
       if (!samlResponse) {
-        return badRequest("SAMLResponse is required");
+        throw new AppError("BAD_REQUEST", "SAMLResponse is required", 400);
       }
 
       const decoded = atob(samlResponse);
@@ -40,12 +59,8 @@ Deno.serve(async (req: Request) => {
       const group = groupMatch?.[1] || "";
 
       if (!email) {
-        return badRequest("Email attribute not found in SAML assertion");
+        throw new AppError("BAD_REQUEST", "Email attribute not found in SAML assertion", 400);
       }
-
-      const supabaseUrl = getRequiredEnv("SUPABASE_URL");
-      const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-      const supabase = createClient(supabaseUrl, supabaseKey);
 
       const { data: ssoConfig } = await supabase
         .from("sso_config")
@@ -84,9 +99,20 @@ Deno.serve(async (req: Request) => {
       return Response.redirect(`${frontendUrl}/auth/callback?provider=saml`, 302);
     }
 
-    return badRequest("Not found");
+    throw new AppError("BAD_REQUEST", "Not found", 404);
   } catch (err) {
-    console.error("Okta SAML error:", err);
-    return internalError(err instanceof Error ? err.message : "Unknown error");
+    const appErr =
+      err instanceof AppError
+        ? err
+        : new AppError("INTERNAL", err instanceof Error ? err.message : "Unknown error", 500);
+
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "error",
+      message: `Okta SAML error: ${appErr.message}`,
+      meta: { code: appErr.code },
+    });
+
+    return fail(appErr, requestId);
   }
 });
