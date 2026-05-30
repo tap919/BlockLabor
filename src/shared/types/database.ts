@@ -41,6 +41,7 @@ export type Database = {
       candidates: {
         Row: {
           attendance_rate: number | null
+          background_check_id: string | null
           background_check_status: string | null
           branch_name: string | null
           client_rating_class: string | null
@@ -48,8 +49,10 @@ export type Database = {
           created_at: string | null
           e_sign_status: string | null
           email: string
+          first_name: string | null
           id: string
           is_redeployed: boolean | null
+          last_name: string | null
           name: string
           no_show_count: number | null
           pay_option: string | null
@@ -70,6 +73,7 @@ export type Database = {
         }
         Insert: {
           attendance_rate?: number | null
+          background_check_id?: string | null
           background_check_status?: string | null
           branch_name?: string | null
           client_rating_class?: string | null
@@ -77,8 +81,10 @@ export type Database = {
           created_at?: string | null
           e_sign_status?: string | null
           email: string
+          first_name?: string | null
           id?: string
           is_redeployed?: boolean | null
+          last_name?: string | null
           name: string
           no_show_count?: number | null
           pay_option?: string | null
@@ -99,6 +105,7 @@ export type Database = {
         }
         Update: {
           attendance_rate?: number | null
+          background_check_id?: string | null
           background_check_status?: string | null
           branch_name?: string | null
           client_rating_class?: string | null
@@ -106,8 +113,10 @@ export type Database = {
           created_at?: string | null
           e_sign_status?: string | null
           email?: string
+          first_name?: string | null
           id?: string
           is_redeployed?: boolean | null
+          last_name?: string | null
           name?: string
           no_show_count?: number | null
           pay_option?: string | null
@@ -409,6 +418,7 @@ export type Database = {
           id: string
           last_sync_date: string | null
           provider: string | null
+          role_mapping: Record<string, string> | null
         }
         Insert: {
           active_directory_group?: string | null
@@ -417,6 +427,7 @@ export type Database = {
           id?: string
           last_sync_date?: string | null
           provider?: string | null
+          role_mapping?: Record<string, string> | null
         }
         Update: {
           active_directory_group?: string | null
@@ -425,6 +436,7 @@ export type Database = {
           id?: string
           last_sync_date?: string | null
           provider?: string | null
+          role_mapping?: Record<string, string> | null
         }
       }
       system_logs: {
@@ -457,6 +469,7 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          is_active: boolean | null
           role: string
         }
         Insert: {
@@ -465,6 +478,7 @@ export type Database = {
           email: string
           full_name?: string | null
           id?: string
+          is_active?: boolean | null
           role: string
         }
         Update: {
@@ -473,6 +487,7 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          is_active?: boolean | null
           role?: string
         }
       }
