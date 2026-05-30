@@ -31,6 +31,7 @@ ALTER TABLE public.incident_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.integrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 -- Helper: get current user's role
 CREATE OR REPLACE FUNCTION public.current_user_role()
@@ -108,3 +109,13 @@ CREATE POLICY vendors_update_policy ON public.partner_vendors
 
 CREATE POLICY logs_select_policy ON public.system_logs
   FOR SELECT USING (current_user_role() IN ('owner', 'recruiter', 'scheduler', 'payroll'));
+
+-- RLS for users table (missing from original migration)
+CREATE POLICY users_select_policy ON public.users
+  FOR SELECT USING (current_user_role() IN ('owner', 'recruiter', 'scheduler', 'payroll'));
+
+CREATE POLICY users_insert_policy ON public.users
+  FOR INSERT WITH CHECK (current_user_role() IN ('owner'));
+
+CREATE POLICY users_update_policy ON public.users
+  FOR UPDATE USING (current_user_role() IN ('owner'));
