@@ -26,19 +26,29 @@ Deno.serve(async (req: Request) => {
       const clientId = getRequiredEnv("OKTA_CLIENT_ID");
       const redirectUri = getRequiredEnv("OKTA_REDIRECT_URI");
 
+      const state = crypto.randomUUID();
+
       const authUrl = new URL(`https://${oktaDomain}/oauth2/default/v1/authorize`);
       authUrl.searchParams.set("client_id", clientId);
       authUrl.searchParams.set("response_type", "code");
       authUrl.searchParams.set("scope", "openid profile email groups");
       authUrl.searchParams.set("redirect_uri", redirectUri);
-      authUrl.searchParams.set("state", crypto.randomUUID());
+      authUrl.searchParams.set("state", state);
 
-      return Response.redirect(authUrl.toString(), 302);
+      const response = Response.redirect(authUrl.toString(), 302);
+      response.headers.set("Set-Cookie", `okta_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`);
+      return response;
     }
 
     if (req.method === "GET" && url.pathname.endsWith("/callback")) {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
+
+      const cookieHeader = req.headers.get("Cookie") || "";
+      const storedState = cookieHeader.match(/okta_oauth_state=([^;]+)/)?.[1];
+      if (!state || state !== storedState) {
+        throw new AppError("INVALID_STATE", "OAuth state mismatch — possible CSRF attack", 403, false);
+      }
 
       if (!code) {
         throw new AppError("BAD_REQUEST", "Authorization code is required", 400);
@@ -72,6 +82,35 @@ Deno.serve(async (req: Request) => {
       }
 
       const idToken = tokenData.id_token;
+
+      const [headerB64, payloadB64, signatureB64] = idToken.split(".");
+      const header = JSON.parse(atob(headerB64));
+
+      const keysResponse = await fetch(`https://${oktaDomain}/oauth2/default/v1/keys`);
+      const { keys } = await keysResponse.json();
+
+      const signingKey = keys.find((k: { kid?: string }) => k.kid === header.kid);
+      if (!signingKey) {
+        throw new AppError("INVALID_TOKEN", "Unknown JWT signing key", 401, false);
+      }
+
+      const keyData = await crypto.subtle.importKey(
+        "jwk",
+        signingKey,
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        false,
+        ["verify"],
+      );
+
+      const encoder = new TextEncoder();
+      const data = encoder.encode(`${headerB64}.${payloadB64}`);
+      const signature = Uint8Array.from(atob(signatureB64), c => c.charCodeAt(0));
+
+      const isValid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", keyData, signature, data);
+      if (!isValid) {
+        throw new AppError("INVALID_TOKEN", "JWT signature verification failed", 401, false);
+      }
+
       const parts = idToken.split(".");
       const claims = JSON.parse(atob(parts[1]));
 
