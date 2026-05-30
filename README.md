@@ -25,3 +25,8 @@ This project is currently in early-stage development.
 2. `npm install`
 3. Set up environment variables as specified in `.env.example`.
 4. `npm run dev`
+
+## Project Structure
+- `src/`: Core application logic, features, and components.
+- `supabase/`: Database migrations and Edge Functions for API integrations.
+- `tests/`: End-to-end and unit testing suites.
