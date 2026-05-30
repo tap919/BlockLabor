@@ -1,20 +1,32 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# BlockLabor
 
-# Run and deploy your AI Studio app
+BlockLabor is a professional staffing marketplace platform designed to connect businesses with high-quality, pre-verified skilled labor. 
 
-This contains everything you need to run your app locally.
+## Features
+- **Job Posting & Management**: Streamlined tools for businesses to post and manage labor needs.
+- **Contractor Matching**: Intelligent matching algorithm to find the right talent for the job.
+- **Integrated Workflow**: Seamless onboarding, background checks, and e-signatures.
+- **Automated Payroll**: Integration with financial systems to handle payments efficiently.
 
-View your app in AI Studio: https://ai.studio/apps/24ee2522-44ab-4347-a78c-a450314c542c
+## Tech Stack
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Zustand
+- **Backend**: Supabase (Postgres, Auth, RLS, Edge Functions, Vault)
+- **Integrations**: 
+  - **Dropbox Sign**: E-signature workflows
+  - **Twilio**: Communication and notifications
+  - **Checkr**: Candidate background verification
+  - **Okta**: Secure SSO for enterprise users
+  - **QuickBooks/Gusto**: Automated payroll and financial synchronization
+- **Observability**: Sentry
+- **Testing**: Vitest, Playwright
 
-## Run Locally
+## Development
+1. Clone the repository.
+2. `npm install`
+3. Set up environment variables as specified in `.env.example`.
+4. `npm run dev`
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Project Structure
+- `src/`: Core application logic, features, and components.
+- `supabase/`: Database migrations and Edge Functions for API integrations.
+- `tests/`: End-to-end and unit testing suites.
