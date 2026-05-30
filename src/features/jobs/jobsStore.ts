@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Job } from '../../shared/types/domain';
-import { mockJobs } from '../../shared/mocks/data';
+import { jobService } from '../../shared/services/jobs.service';
 
 interface JobsStore {
   jobs: Job[];
@@ -10,7 +10,7 @@ interface JobsStore {
 }
 
 export const useJobsStore = create<JobsStore>((set) => ({
-  jobs: mockJobs,
+  jobs: jobService.getAll(),
   setJobs: (jobs) => set({ jobs }),
   addJob: (job) => set((state) => ({ jobs: [job, ...state.jobs] })),
   updateJobStatus: (id, status, contractorId, extraUpdates) =>

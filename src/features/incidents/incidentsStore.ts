@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { IncidentReport, SystemLog } from '../../shared/types/domain';
-import { mockIncidentReports } from '../../shared/mocks/data';
+import { incidentService } from '../../shared/services/incidents.service';
 
 interface IncidentsStore {
   incidents: IncidentReport[];
@@ -9,7 +9,7 @@ interface IncidentsStore {
 }
 
 export const useIncidentsStore = create<IncidentsStore>((set) => ({
-  incidents: mockIncidentReports,
+  incidents: incidentService.getAll(),
   addIncident: (incident) => set((state) => ({ incidents: [incident, ...state.incidents] })),
   updateIncidentStatus: (id, status, resolutionNotes) =>
     set((state) => ({

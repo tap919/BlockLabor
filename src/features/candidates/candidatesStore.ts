@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { WorkerCandidate } from '../../shared/types/domain';
-import { mockCandidates } from '../../shared/mocks/data';
+import { candidateService } from '../../shared/services/candidates.service';
 
 interface CandidatesStore {
   candidates: WorkerCandidate[];
@@ -9,7 +9,7 @@ interface CandidatesStore {
 }
 
 export const useCandidatesStore = create<CandidatesStore>((set) => ({
-  candidates: mockCandidates,
+  candidates: candidateService.getAll(),
   setCandidates: (candidates) => set({ candidates }),
   updateCandidate: (id, updates) =>
     set((state) => ({

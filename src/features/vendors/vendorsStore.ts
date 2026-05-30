@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { PartnerVendor, SystemLog } from '../../shared/types/domain';
-import { mockPartnerVendors } from '../../shared/mocks/data';
+import { vendorService } from '../../shared/services/vendors.service';
 
 interface VendorsStore {
   vendors: PartnerVendor[];
@@ -9,7 +9,7 @@ interface VendorsStore {
 }
 
 export const useVendorsStore = create<VendorsStore>((set) => ({
-  vendors: mockPartnerVendors,
+  vendors: vendorService.getAll(),
   addVendor: (vendor) => set((state) => ({ vendors: [...state.vendors, vendor] })),
   updateVendorStatus: (id, status) =>
     set((state) => ({

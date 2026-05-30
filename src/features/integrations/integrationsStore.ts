@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { IntegrationSetting } from '../../shared/types/domain';
-import { mockIntegrations } from '../../shared/mocks/data';
+import { integrationService } from '../../shared/services/integrations.service';
 
 interface IntegrationsStore {
   integrations: IntegrationSetting[];
@@ -8,7 +8,7 @@ interface IntegrationsStore {
 }
 
 export const useIntegrationsStore = create<IntegrationsStore>((set) => ({
-  integrations: mockIntegrations,
+  integrations: integrationService.getAll(),
   toggleIntegration: (id) =>
     set((state) => ({
       integrations: state.integrations.map((node) =>
