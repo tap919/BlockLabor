@@ -1,15 +1,29 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getRequiredEnv } from "../shared/auth.ts";
 import { verifyHmacSignature } from "../shared/webhook.ts";
-import { errorResponse, badRequest, internalError } from "../shared/error.ts";
+import { AppError } from "../shared/errors.ts";
+import { ok, fail } from "../shared/response.ts";
+import { logEvent } from "../shared/logger.ts";
 import { checkIdempotency, markProcessed } from "../shared/idempotency.ts";
 
 Deno.serve(async (req: Request) => {
-  if (req.method !== "POST") {
-    return badRequest("Method not allowed");
-  }
+  const requestId = crypto.randomUUID();
+
+  const supabaseUrl = getRequiredEnv("SUPABASE_URL");
+  const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "info",
+      message: "Dropbox Sign webhook received",
+    });
+
+    if (req.method !== "POST") {
+      throw new AppError("BAD_REQUEST", "Method not allowed", 405, false);
+    }
+
     const body = await req.text();
     const signature = req.headers.get("X-Dropbox-Sign-Signature") || "";
     const timestamp = req.headers.get("X-Dropbox-Sign-Request-Timestamp") || "";
@@ -18,23 +32,17 @@ Deno.serve(async (req: Request) => {
     const isValid = await verifyHmacSignature(body, signature, apiKey);
 
     if (!isValid) {
-      return errorResponse(401, "INVALID_SIGNATURE", "Webhook signature verification failed");
+      throw new AppError("INVALID_SIGNATURE", "Webhook signature verification failed", 401, false);
     }
 
     const payload = JSON.parse(body);
     const eventType = payload.event?.event_type || "unknown";
     const signatureRequestId = payload.signature_request?.signature_request_id;
 
-    const supabaseUrl = getRequiredEnv("SUPABASE_URL");
-    const supabaseKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     if (signatureRequestId) {
       const idempotency = await checkIdempotency(supabase, "dropbox_sign", signatureRequestId);
       if (idempotency.exists) {
-        return new Response(JSON.stringify({ success: true, ignored: true }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return ok({ ignored: true });
       }
     }
 
@@ -76,11 +84,26 @@ Deno.serve(async (req: Request) => {
       "processed",
     );
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { "Content-Type": "application/json" },
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "success",
+      message: `Dropbox Sign webhook processed: ${eventType}`,
     });
+
+    return ok({ processed: true });
   } catch (err) {
-    console.error("Dropbox Sign webhook error:", err);
-    return internalError(err instanceof Error ? err.message : "Unknown error");
+    const appError =
+      err instanceof AppError
+        ? err
+        : new AppError("INTERNAL_ERROR", err instanceof Error ? err.message : "Unknown error", 500, false);
+
+    await logEvent(supabase, requestId, {
+      category: "system",
+      type: "error",
+      message: `Dropbox Sign webhook error: ${appError.message}`,
+      meta: { code: appError.code },
+    });
+
+    return fail(appError, requestId);
   }
 });
