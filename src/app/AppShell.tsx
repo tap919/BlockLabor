@@ -1,78 +1,50 @@
-import { Dispatch, SetStateAction } from 'react';
-import { Navigation, ViewState } from '../components/common/Navigation';
-import { HomeView } from '../features/landing/components/Home';
-import { BookingPage as BookLaborView } from '../features/booking/BookingPage';
-import { ClientPortalView } from '../features/jobs/components/ClientPortal';
-import { ContractorPortalView } from '../features/candidates/components/ContractorPortal';
-import { StaffDashboardView } from '../features/dashboard/components/StaffDashboard';
-import { ServicesView } from '../features/landing/components/Services';
-import { PricingView } from '../features/landing/components/Pricing';
-import { AboutView } from '../features/landing/components/About';
-import { QaStagingHub } from '../features/admin/components/QaStagingHub';
-import type { Job, WorkerCandidate, IntegrationSetting, SystemLog, PartnerVendor, IncidentReport, BranchDivision, RateCard, SsoConfig, AdminPermissions } from '../shared/types/domain';
+import { Dispatch, SetStateAction, ReactNode } from 'react';
+import { Navigation } from '../components/common/Navigation';
+import type { SystemLog } from '../shared/types/domain';
+import type { ViewState } from '../components/common/Navigation';
 
 interface AppShellProps {
   currentView: ViewState;
   setCurrentView: Dispatch<SetStateAction<ViewState>>;
   isEnterprise: boolean;
   setIsEnterprise: Dispatch<SetStateAction<boolean>>;
-  jobs: Job[];
-  candidates: WorkerCandidate[];
-  integrations: IntegrationSetting[];
   logs: SystemLog[];
-  partnerVendors: PartnerVendor[];
-  incidentReports: IncidentReport[];
-  branches: BranchDivision[];
-  rateCards: RateCard[];
-  ssoConfig: SsoConfig;
-  permissions: AdminPermissions[];
   handleAddLog: (category: string, message: string, type?: string) => void;
-  handleBookJob: (job: Omit<Job, 'id' | 'createdAt'>) => void;
-  handleChangeJobStatus: (id: string, status: Job['status'], contractorId?: string, extraUpdates?: Partial<Job>) => Promise<void>;
-  handleUpdateCandidate: (id: string, updates: Partial<WorkerCandidate>) => void;
-  handleToggleIntegration: (id: string) => void;
-  handleAddIncident: (incident: IncidentReport) => void;
-  handleUpdateIncidentStatus: (id: string, status: IncidentReport['status'], resolutionNotes?: string) => void;
-  handleAddPartnerVendor: (vendor: PartnerVendor) => void;
-  handleUpdatePartnerVendorStatus: (id: string, status: PartnerVendor['status']) => void;
-  setJobs: (jobs: Job[]) => void;
-  setCandidates: (candidates: WorkerCandidate[]) => void;
-  setBranches: Dispatch<SetStateAction<BranchDivision[]>>;
-  setRateCards: Dispatch<SetStateAction<RateCard[]>>;
-  setSsoConfig: Dispatch<SetStateAction<SsoConfig>>;
-  setPermissions: Dispatch<SetStateAction<AdminPermissions[]>>;
+  children: ReactNode;
+  // Additional props passed from App.tsx but not used by AppShell
+  jobs?: any;
+  candidates?: any;
+  integrations?: any;
+  partnerVendors?: any;
+  incidentReports?: any;
+  branches?: any;
+  rateCards?: any;
+  ssoConfig?: any;
+  permissions?: any;
+  handleBookJob?: any;
+  handleChangeJobStatus?: any;
+  handleUpdateCandidate?: any;
+  handleToggleIntegration?: any;
+  handleAddIncident?: any;
+  handleUpdateIncidentStatus?: any;
+  handleAddPartnerVendor?: any;
+  handleUpdatePartnerVendorStatus?: any;
+  setJobs?: any;
+  setCandidates?: any;
+  setBranches?: any;
+  setRateCards?: any;
+  setSsoConfig?: any;
+  setPermissions?: any;
 }
 
-export function AppShell({ 
-  currentView, 
-  setCurrentView, 
+export function AppShell({
+  currentView,
+  setCurrentView,
   isEnterprise,
   setIsEnterprise,
-  jobs,
-  candidates,
-  integrations,
   logs,
-  partnerVendors,
-  incidentReports,
-  branches,
-  rateCards,
-  ssoConfig,
-  permissions,
   handleAddLog,
-  handleBookJob,
-  handleChangeJobStatus,
-  handleUpdateCandidate,
-  handleToggleIntegration,
-  handleAddIncident,
-  handleUpdateIncidentStatus,
-  handleAddPartnerVendor,
-  handleUpdatePartnerVendorStatus,
-  setJobs,
-  setCandidates,
-  setBranches,
-  setRateCards,
-  setSsoConfig,
-  setPermissions
+  children
 }: AppShellProps) {
   return (
     <div className="min-h-screen bg-[#0F1115] font-sans text-white antialiased selection:bg-[#10B981] selection:text-[#0F1115]">
@@ -117,92 +89,7 @@ export function AppShell({
       </div>
 
       <main className="pb-16">
-        {currentView === 'home' && <HomeView setView={setCurrentView} />}
-        {currentView === 'services' && <ServicesView />}
-        {currentView === 'pricing' && <PricingView isEnterprise={isEnterprise} />}
-        
-        {currentView === 'book' && (
-          <BookLaborView 
-            onBookJob={handleBookJob} 
-            setView={(v) => setCurrentView(v as ViewState)} 
-            isEnterprise={isEnterprise}
-            branches={branches}
-            rateCards={rateCards}
-          />
-        )}
-        
-        {currentView === 'client' && (
-          <ClientPortalView 
-            jobs={jobs} 
-            candidates={candidates} 
-            incidentReports={incidentReports}
-            onAddIncident={handleAddIncident}
-            onChangeJobStatus={handleChangeJobStatus}
-            onAddLog={handleAddLog}
-            isEnterprise={isEnterprise}
-            branches={branches}
-            rateCards={rateCards}
-          />
-        )}
-        
-        {currentView === 'contractor' && (
-          <ContractorPortalView 
-            jobs={jobs} 
-            candidates={candidates} 
-            incidentReports={incidentReports}
-            onAddIncident={handleAddIncident}
-            onChangeJobStatus={handleChangeJobStatus}
-            onUpdateCandidate={handleUpdateCandidate}
-            onAddLog={handleAddLog}
-          />
-        )}
-
-        {currentView === 'staff' && (
-          <StaffDashboardView 
-            jobs={jobs}
-            candidates={candidates}
-            integrations={integrations}
-            logs={logs}
-            partnerVendors={partnerVendors}
-            incidentReports={incidentReports}
-            onBookJob={handleBookJob}
-            onChangeJobStatus={handleChangeJobStatus}
-            onUpdateCandidate={handleUpdateCandidate}
-            onToggleIntegration={handleToggleIntegration}
-            onAddLog={handleAddLog}
-            onAddIncident={handleAddIncident}
-            onUpdateIncidentStatus={handleUpdateIncidentStatus}
-            onAddPartnerVendor={handleAddPartnerVendor}
-            onUpdatePartnerVendorStatus={handleUpdatePartnerVendorStatus}
-            isEnterprise={isEnterprise}
-            setIsEnterprise={setIsEnterprise}
-            branches={branches}
-            setBranches={setBranches}
-            rateCards={rateCards}
-            setRateCards={setRateCards}
-            ssoConfig={ssoConfig}
-            setSsoConfig={setSsoConfig}
-            permissions={permissions}
-            setPermissions={setPermissions}
-          />
-        )}
-        
-        {currentView === 'about' && <AboutView />}
-
-        {currentView === 'qa' && (
-          <QaStagingHub
-            jobs={jobs}
-            setJobs={setJobs}
-            candidates={candidates}
-            setCandidates={setCandidates}
-            logs={logs}
-            onAddLog={handleAddLog}
-            isEnterprise={isEnterprise}
-            setIsEnterprise={setIsEnterprise}
-            permissions={permissions}
-            setPermissions={setPermissions}
-          />
-        )}
+        {children}
       </main>
     </div>
   );
