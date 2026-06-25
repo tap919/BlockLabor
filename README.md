@@ -25,3 +25,15 @@ This project is currently in early-stage development.
 2. `npm install`
 3. Set up environment variables as specified in `.env.example`.
 4. `npm run dev`
+
+## Integration Architecture
+
+BlockLabor serves as the orchestration layer for the following integrated systems:
+
+- **Aetherdesk**: Utilizes AgentBrowser (via VibeServe) for enhanced customer service and Claw Protect for security.
+- **Jobclaw**: Leverages Mutly for automated development workflows and Big Homie (via AgentBrowser) for AI-powered job hunting.
+- **AgentBrowser**: The central UI and integration hub, consuming tools from VibeServe, Big Homie, and Mem0.
+- **RepoRank**: Provides continuous code quality grading and security scanning across all integrated projects.
+- **Claw Protect**: Enforces security policies and protects against prompt injection and data exfiltration across all agentic systems.
+
+For detailed integration plans, see `docs/superpowers/plans/`.
