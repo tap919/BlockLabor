@@ -23,7 +23,7 @@ module.exports = blocklaborConfig;
 
 ## JavaScript Projects
 
-For JavaScript codebases that use TypeScript for type-checking only, use the JavaScript-compatible variant:
+For JavaScript codebases that use TypeScript for `.ts`/`.tsx` files only (not checking `.js`/`.jsx` files), use the JavaScript-compatible variant:
 
 ```json
 {
@@ -35,4 +35,4 @@ For JavaScript codebases that use TypeScript for type-checking only, use the Jav
 }
 ```
 
-This variant enables `allowJs` and `checkJs` but disables `strict` mode to avoid breaking untyped JavaScript code. It's suitable for projects that are primarily JavaScript but want some type checking via JSDoc comments or gradual TypeScript migration.
+This variant enables `allowJs` but disables `checkJs` to avoid type-checking untyped JavaScript files. It's suitable for projects that have some TypeScript files alongside JavaScript files. The strictest TypeScript checks are disabled to accommodate untyped code.
