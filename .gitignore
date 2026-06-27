@@ -14,6 +14,40 @@ test-results/
 .env.*
 !.env.example
 
+# Binary files — never commit
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.bmp
+*.webp
+*.mp3
+*.mp4
+*.wav
+*.flac
+*.ogg
+*.avi
+*.mov
+*.mkv
+*.pdf
+*.epub
+*.exe
+*.msi
+*.dmg
+*.deb
+*.rpm
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.otf
+
 # Logs
 *.log
 npm-debug.log*
