@@ -14,6 +14,7 @@ function mapCandidate(row: Record<string, unknown>): WorkerCandidate {
     backgroundCheckStatus: row.background_check_status as WorkerCandidate['backgroundCheckStatus'],
     eSignStatus: row.e_sign_status as WorkerCandidate['eSignStatus'],
     verifiedCredentials: (row.verified_credentials as string[]) ?? [],
+    workerVerificationStatus: (row.worker_verification_status as WorkerCandidate['workerVerificationStatus']) ?? 'pending',
     payOption: row.pay_option as WorkerCandidate['payOption'],
     stateCode: row.state_code as string | undefined,
     recruiterName: row.recruiter_name as string | undefined,

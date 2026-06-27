@@ -3,8 +3,8 @@ import { VERTICALS } from '../../constants';
 export function VerticalSelector({ selectedVertical, onSelect }: any) {
   return (
     <div>
-      <label className="block text-xs font-bold text-[#8E9299] uppercase tracking-wider mb-2">Business Vertical & Safety System</label>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <span id="business-vertical-label" className="block text-xs font-bold text-[#8E9299] uppercase tracking-wider mb-2">Business Vertical & Safety System</span>
+      <div role="group" aria-labelledby="business-vertical-label" className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {VERTICALS.map(v => (
           <button
             key={v}

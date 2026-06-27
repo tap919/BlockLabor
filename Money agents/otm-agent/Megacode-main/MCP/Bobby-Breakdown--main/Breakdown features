@@ -1,0 +1,117 @@
+This is a solid blueprint that nails the "tour guide" vibe. Below is a polished version of your feature set, grouped by user goal, plus some practical notes on how to build it without drowning in complexity.
+
+---
+
+🧩 Core Breakdown Features
+
+What non‑devs actually need to understand code
+
+· Plain‑Language Summaries
+    One‑click explanations for whole files, functions, classes, or even a single line. Error messages get translated from cryptic red squiggles to plain English.
+· Step‑by‑Step “What Happens When This Runs?”
+    Visual execution flow: Input → Processing → Output with animated arrows.
+    Kid mode swaps jargon for everyday metaphors (“this function is like a vending machine…”).
+· Auto‑Generated Diagrams
+    Flowcharts, data flow, component trees, and API call maps – all created from your code with zero drawing.
+· “Translate Code to English” Mode
+    Toggle between raw code and:
+  · Plain English narrative
+  · Bullet‑point logic
+  · Pseudocode
+  · Business‑friendly summary
+
+---
+
+🛠️ Interaction & Personality
+
+Make it feel like a friendly guide, not a manual
+
+· Ask‑Anything Chat Panel
+    A sidebar that always knows which file you’re looking at. Ask “Why is this broken?” or “What’s a variable?” and get answers grounded in your code.
+· “Explain Like I’m…” Modes
+    Switch persona on the fly:
+    👶 5‑year‑old · 📊 Project Manager · 🎨 Designer · 🚀 Founder · 🔬 Scientist · 🎤 Rapper (Street Code flavour)
+· Red Flag Warnings
+    Gently highlight dangerous zones: payment logic, database writes, security code. Hover to learn why it’s sensitive and what to be careful about.
+
+---
+
+📚 Learning & Onboarding
+
+Build intuition without information overload
+
+· Vocabulary Popovers
+    Hover any programming word (import, array, async) to see a definition, a real‑world example, and whether it’s safe to edit.
+· “Show Me the Output” Sandbox
+    Run small snippets and watch the transformation:
+    Input values → step‑through execution → final output, visualised.
+
+---
+
+🧭 Navigation & Discovery
+
+Help them understand the project’s shape
+
+· File Purpose Labels
+    Auto‑tag files with friendly icons and descriptions:
+    🖼️ UI Component · 🎨 Styles · 🔌 API Route · 🗄️ Database Model · ⚙️ Config · 🧰 Utility
+· Project Map View
+    A zoomable tree that shows how files connect – which components use which APIs, where data comes from, etc.
+
+---
+
+🧯 Safety & Guardrails
+
+Let them explore without fear of breaking things
+
+· Undo‑Safe Editing
+    Before saving, show a diff preview in plain language (“You’re about to change the price calculation formula…”). One click reverts.
+· “Are You Sure?” Warnings
+    Trigger smart warnings when editing sensitive areas:
+    “This line sends emails to customers. Changing it might send test emails to real people.”
+
+---
+
+💥 Signature Feature: “Break It Down” Button
+
+Your all‑in‑one tour start
+
+One click does everything:
+
+· Summarises the current file
+· Draws a diagram
+· Lists key concepts and vocabulary
+· Highlights safe‑to‑edit sections
+· Suggests what to explore next
+
+---
+
+🧱 Implementation Notes (For the Build Phase)
+
+1. AI Backend
+
+· Use a local or cloud LLM (like GPT‑4 or CodeLlama) fine‑tuned for explanations.
+· For speed and privacy, consider a hybrid: local small model for hover definitions, cloud for heavy diagrams.
+
+2. VS Code Integration
+
+· Leverage the Language Server Protocol to understand code structure.
+· Use decorations (underlines, badges) for red flags and safe zones.
+· The chat panel can be a WebviewView with Markdown rendering.
+
+3. Diagram Generation
+
+· Start with simple ASCII flowcharts using libraries like nomnoml.
+· Later integrate Mermaid.js for rendered SVG diagrams.
+
+4. Safety & Permissions
+
+· Always ask before sending code to an external API.
+· Provide a “no‑cloud” mode that works entirely offline (limited but private).
+
+5. Phased Rollout
+
+· MVP: Plain‑language summaries + error explanations + vocabulary popovers.
+· Phase 2: Chat panel + “Explain Like I’m…” modes.
+· Phase 3: Diagrams + sandbox + project map.
+

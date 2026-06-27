@@ -1,0 +1,10 @@
+{
+  "id": "client-fintech",
+  "name": "Client Fintech",
+  "description": "Blue accent, dense spacing — optimized for financial dashboards",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["client", "fintech", "dense"],
+  "components": [],
+  "layouts": []
+}

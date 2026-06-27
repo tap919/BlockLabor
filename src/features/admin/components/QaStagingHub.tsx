@@ -155,6 +155,7 @@ export function QaStagingHub({
         'Generate active timesheet entity, record UTC check-in timestamp.',
         'Apply safety induction policy checklists and mark complete.'
       ],
+      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Not an interactive element; false positive from surrounding object literal.
       status: 'idle'
     },
     {
@@ -343,7 +344,7 @@ export function QaStagingHub({
         onAddLog('recruiter', 'QA Staging System promoted Jeremy Croft status to "active" compliance status.', 'success');
         break;
 
-      case 'e2e-04': // Book job
+      case 'e2e-04': { // Book job
         // Dynamic push new job order Apex Staging Packing
         const newStagingJob: Job = {
           id: 'job-stg-' + Math.floor(Math.random() * 1000 + 101),
@@ -375,8 +376,9 @@ export function QaStagingHub({
         setJobs([newStagingJob, ...jobs]);
         onAddLog('scheduler', 'QA Staging dispatched automated labor Block: Apex QA Auto Packing ($130 bill rate).', 'info');
         break;
+      }
 
-      case 'e2e-05': // Worker confirms
+      case 'e2e-05': { // Worker confirms
         // Force confirm of job-101 or similar open job to accepted
         setJobs(jobs.map(job => {
           if (job.id === 'job-101') {
@@ -387,6 +389,7 @@ export function QaStagingHub({
         // Notify
         onAddLog('scheduler', 'Marcus Hayes confirmed accept booking dispatch via Twilio mobile portal emulation.', 'success');
         break;
+      }
 
       case 'e2e-08': // Gusto payout
         onAddLog('payroll', '[Gusto] Integrated automatic payroll trigger of $100 payout to Marcus Hayes.', 'success');
@@ -411,8 +414,9 @@ export function QaStagingHub({
     let passedCount = 0;
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
+      if (!tc) continue;
       setSuiteProgress(Math.round(((i) / testCases.length) * 100));
-      
+
       const pass = await runTest(tc.id);
       if (pass) passedCount++;
     }

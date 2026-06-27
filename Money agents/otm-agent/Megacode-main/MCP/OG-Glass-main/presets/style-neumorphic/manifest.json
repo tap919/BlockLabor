@@ -1,0 +1,12 @@
+{
+  "id": "style-neumorphic",
+  "name": "Neumorphic Soft UI",
+  "description": "Soft extruded surfaces and inset shadows on a light background. Classic neumorphism — depth without glass.",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["style", "neumorphic", "light", "soft-ui", "shadow-depth"],
+  "styleCategory": "neumorphic",
+  "designPrinciples": ["depth-through-shadow", "soft-extrusion", "monochromatic-light", "no-harsh-borders"],
+  "components": [],
+  "layouts": []
+}

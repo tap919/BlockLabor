@@ -233,7 +233,11 @@ export function StaffDashboardView({
     const splitSkills = newJobSkills ? newJobSkills.split(',').map(s => s.trim()) : ['General Support'];
 
     // Construct compliance checklist
-    const activeWorkflow = VERTICAL_WORKFLOWS.find(v => v.vertical === newJobVertical) || VERTICAL_WORKFLOWS[0];
+    const activeWorkflow = VERTICAL_WORKFLOWS.find(v => v.vertical === newJobVertical) ?? VERTICAL_WORKFLOWS[0];
+    if (!activeWorkflow) {
+      onAddLog('system', 'No workflow defined for this vertical.', 'warning');
+      return;
+    }
     const checklist = activeWorkflow.complianceChecklist.map((term, idx) => ({
       id: `${jobId}-check-${idx}`,
       text: term,
@@ -249,7 +253,7 @@ export function StaffDashboardView({
       id: jobId,
       businessName: newJobBusiness || 'Backoffice Requested LLC',
       vertical: newJobVertical,
-      category: newJobCategory || CATEGORIES_BY_VERTICAL[newJobVertical]?.[0],
+      category: newJobCategory || CATEGORIES_BY_VERTICAL[newJobVertical]?.[0] || 'General Assistance',
       blockType: newJobDurationShifts > 1 ? '1-week' : '8-hour',
       startWindow: newJobStartWindow || 'Tomorrow morning SOW window',
       location: newJobLocation,
@@ -775,7 +779,7 @@ export function StaffDashboardView({
                       onChange={e => {
                         const val = e.target.value as VerticalType;
                         setNewJobVertical(val);
-                        setNewJobCategory(CATEGORIES_BY_VERTICAL[val][0]);
+                        setNewJobCategory(CATEGORIES_BY_VERTICAL[val]?.[0] ?? 'General Assistance');
                       }}
                       className="bg-[#1F232B] border border-zinc-800 rounded p-2 text-white w-full outline-none"
                     >
@@ -956,6 +960,7 @@ export function StaffDashboardView({
                                       const activeVertCandidates = candidates.filter(c => c.status === 'active' && c.verticals.includes(job.vertical));
                                       if (activeVertCandidates.length > 0) {
                                         const topCand = [...activeVertCandidates].sort((a, b) => (b.reliabilityScore || 0) - (a.reliabilityScore || 0))[0];
+                                        if (!topCand) return null;
                                         const isPastWorker = (topCand.reliabilityScore || 0) > 90 || topCand.clientRatingClass === 'premium';
                                         const alignmentScore = Math.min(99, Math.round((topCand.reliabilityScore || 95) + (isPastWorker ? 4 : 0)));
                                         return (
@@ -1748,15 +1753,15 @@ ${copilotInstruction ? `Note: ${copilotInstruction}\n` : ''}Reply YES to lock in
                         const newVendor: PartnerVendor = {
                           id: 'v-' + Math.floor(Math.random() * 1000 + 400),
                           name: vendorName,
-                          contactName: vendorContact || "Administrative Desk",
+                          contactName: vendorContact ?? "Administrative Desk",
                           email: vendorEmail,
-                          phone: vendorPhone || "(555) 123-4567",
+                          phone: vendorPhone ?? "(555) 123-4567",
                           verticals: [vendorVertical],
                           markupShare: vendorMarkup / 100,
                           status: 'active',
                           assignedJobsCount: 0,
-                          insuranceExpiry: new Date(Date.now() + 31536000000).toISOString().split('T')[0],
-                          taxId: vendorTaxId
+                          insuranceExpiry: new Date(Date.now() + 31536000000).toISOString().split('T')[0] ?? '',
+                          taxId: vendorTaxId!
                         };
                         onAddPartnerVendor(newVendor);
                         alert(`Subcontract Supplier Partner successfully registered: ${vendorName}! Markups and compliance live.`);

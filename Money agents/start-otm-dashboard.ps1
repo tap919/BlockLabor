@@ -1,0 +1,2 @@
+Start-Process powershell -WorkingDirectory "C:\Users\User\Desktop\Money agents" -ArgumentList "-NoExit", "npx", "next", "dev", "--port", "3000", "--host", "127.0.0.1" -RedirectStandardOutput "C:\Users\User\Desktop\Money agents\nextjs_dev.log" -RedirectStandardError "C:\Users\User\Desktop\Money agents\nextjs_dev.log"
+Write-Host "OTM Dashboard starting in new window on http://127.0.0.1:3000. Check nextjs_dev.log for output."

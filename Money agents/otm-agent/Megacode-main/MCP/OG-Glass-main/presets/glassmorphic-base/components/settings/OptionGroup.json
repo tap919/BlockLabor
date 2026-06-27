@@ -1,0 +1,18 @@
+{
+  "name": "OptionGroup",
+  "category": "settings",
+  "description": "Settings section container with labeled group header",
+  "propsSchema": {
+    "label": {
+      "type": "string",
+      "required": true,
+      "description": "Section label"
+    },
+    "children": {
+      "type": "ReactNode",
+      "required": false,
+      "description": "OptionRow children"
+    }
+  },
+  "template": "import React from 'react';\n\ninterface OptionGroupProps {\n  label: string;\n  children?: React.ReactNode;\n}\n\nexport function OptionGroup({ label, children }: OptionGroupProps) {\n  return (\n    <section style={{ marginBottom: '{{token:spacing.settings.sectionGap}}' }}>\n      <h3\n        style={{\n          fontSize: '{{token:typography.scale.xs}}',\n          fontWeight: '{{token:typography.weight.semibold}}',\n          color: '{{token:colors.text.muted}}',\n          textTransform: 'uppercase',\n          letterSpacing: '0.08em',\n          marginBottom: '8px',\n          fontFamily: '{{token:typography.fontFamily.body}}',\n        }}\n      >\n        {label}\n      </h3>\n      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>\n        {children}\n      </div>\n    </section>\n  );\n}\n\ninterface OptionRowProps {\n  label: string;\n  children?: React.ReactNode;\n}\n\nexport function OptionRow({ label, children }: OptionRowProps) {\n  return (\n    <div\n      style={{\n        display: 'flex',\n        alignItems: 'center',\n        minHeight: '{{token:spacing.settings.rowHeight}}',\n        padding: '0 12px',\n        borderRadius: '8px',\n        transition: '{{token:animation.transition.default}}',\n      }}\n    >\n      <span\n        style={{\n          width: '{{token:spacing.settings.labelWidth}}',\n          fontSize: '{{token:typography.scale.sm}}',\n          color: '{{token:colors.text.secondary}}',\n          fontFamily: '{{token:typography.fontFamily.body}}',\n          flexShrink: 0,\n        }}\n      >\n        {label}\n      </span>\n      <div style={{ flex: 1 }}>{children}</div>\n    </div>\n  );\n}\n"
+}

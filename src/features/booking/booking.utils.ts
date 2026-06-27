@@ -43,11 +43,13 @@ export const calculateJobData = (
   const calculatedPayout = payoutRate * hours;
   const calculatedCharge = billingRate * hours;
 
+  const fallbackCategory = CATEGORIES_BY_VERTICAL[selectedVertical]?.[0] ?? 'General Assistance';
+
   return {
     id: jobId,
     businessName: businessName || 'Anonymous Corp',
     vertical: selectedVertical,
-    category: selectedCategory || CATEGORIES_BY_VERTICAL[selectedVertical][0],
+    category: selectedCategory || fallbackCategory,
     blockType: selectedBlockId,
     startWindow: startWindow || 'Immediate Start Window',
     location: location || 'On Site Location Specified',

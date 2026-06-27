@@ -1,0 +1,10 @@
+{
+  "id": "client-saas",
+  "name": "Client SaaS",
+  "description": "Purple accent, wider cards — optimized for SaaS product dashboards",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["client", "saas", "spacious"],
+  "components": [],
+  "layouts": []
+}

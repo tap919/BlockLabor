@@ -1,0 +1,213 @@
+# Pyrite64 → Vibe Coding Game + Cartoon Animation Engine
+## Transformation Scaffold
+
+> Fork: HailToDodongo/pyrite64  
+> Stack: Electron + TypeScript (editor) · C / libdragon + tiny3d (N64 runtime)  
+> Milestone 1: Three.js 3D Viewport  
+
+---
+
+## What We're Adding on Top of Pyrite64
+
+| Layer | What changes |
+|---|---|
+| **Cartoon Renderer** | New N64 render mode: cel-shading, outline pass, flat-palette materials |
+| **Animation Engine** | Keyframe timeline panel + skeletal animation export to N64 |
+| **Vibe Coding** | Claude API node in the Node-Graph: describe behavior → generate control-flow |
+| **3D Viewport** | Three.js live preview replacing current viewport, with N64-accurate constraints |
+
+---
+
+## Directory Structure (Delta on fork)
+
+```
+pyrite64/                          ← existing repo root
+│
+├── src/                           ← existing Electron editor source
+│   ├── main/                      (Electron main process)
+│   │   └── ipc/
+│   │       ├── build.ipc.ts       ← invoke CLI build pipeline
+│   │       └── emulator.ipc.ts    ← launch Ares / gopher64
+│   │
+│   └── renderer/                  (Electron renderer process)
+│       ├── index.html
+│       ├── index.ts
+│       │
+│       ├── viewport/              ← NEW: Three.js 3D Viewport
+│       │   ├── Viewport3D.ts      ← Main viewport class (see stub below)
+│       │   ├── N64MaterialBridge.ts  ← Maps Fast64 materials → Three.js shaders
+│       │   ├── CartoonPass.ts     ← Cel-shade + outline post-process
+│       │   ├── GridHelper.ts      ← N64 unit grid overlay
+│       │   └── CameraController.ts   ← Orbit + fly cam
+│       │
+│       ├── timeline/              ← NEW: Animation Timeline
+│       │   ├── Timeline.ts        ← Keyframe track editor
+│       │   ├── Clip.ts            ← Animation clip data model
+│       │   └── N64AnimExporter.ts ← Bake keyframes → tiny3d anim format
+│       │
+│       ├── vibe/                  ← NEW: AI-assisted scripting
+│       │   ├── VibeNode.ts        ← Claude API node for Node-Graph
+│       │   └── prompts/
+│       │       ├── movement.txt
+│       │       ├── enemy_ai.txt
+│       │       └── animation_trigger.txt
+│       │
+│       ├── panels/                ← existing panels (keep, extend)
+│       │   ├── SceneTree.ts
+│       │   ├── Properties.ts
+│       │   ├── AssetManager.ts
+│       │   └── NodeGraph.ts       ← add VibeNode to palette
+│       │
+│       └── styles/
+│           ├── theme-n64.css      ← retro CRT aesthetic
+│           └── cartoon.css
+│
+├── n64/                           ← existing N64 C runtime
+│   ├── engine/                    (existing)
+│   └── cartoon/                   ← NEW: Cartoon render module
+│       ├── cel_shader.c
+│       ├── cel_shader.h
+│       ├── outline_pass.c         ← edge detect via RDP trick
+│       └── palette_reduce.c       ← quantize to N64 palette bands
+│
+└── tools/                         ← NEW: build helpers
+    ├── gltf_to_n64.ts             ← enhanced GLTF importer with cartoon mat support
+    └── bake_lightmap.ts           ← cartoon flat-shading bake
+```
+
+---
+
+## Milestone 1: Three.js Viewport
+
+**Goal:** Replace / extend existing viewport with a live Three.js scene preview that:
+1. Loads the same scene graph used by the N64 runtime
+2. Applies N64-accurate constraints (64 tris/mesh budget warning, 32×32 / 64×64 / 256×256 texture slots)
+3. Has a **Cartoon Preview toggle** that shows cel-shading approximation in-editor
+4. Matches the camera model used by tiny3d
+
+### Files to create first:
+- `src/renderer/viewport/Viewport3D.ts` ← see stub file
+- `src/renderer/viewport/N64MaterialBridge.ts`
+- `src/renderer/viewport/CartoonPass.ts`
+- `src/renderer/viewport/CameraController.ts`
+
+### npm deps to add:
+```json
+{
+  "three": "^0.172.0",
+  "@types/three": "^0.172.0",
+  "postprocessing": "^6.36.0"
+}
+```
+
+---
+
+## Milestone 2: Cartoon Render Mode ✅
+
+**N64 side (C):**
+- `cel_shader.c`: ✅ RDP combiner-based cel shading with LUT palette texture
+- `outline.c`: ✅ Two-pass back-face hull technique for silhouette outlines
+- `palette_reduce.c`: ✅ Quantize vertex colors to N discrete bands with style presets
+
+**Editor side:**
+- `CartoonPass.ts`: ✅ Multi-style post-process shader with 5 cartoon aesthetics
+- `CartoonStylePresets.ts`: ✅ Named style configurations (Classic Cel, Anime, Comic Book, Watercolor, Retro)
+- `N64MaterialBridge.ts`: ✅ Style-aware cartoon material conversion
+- Material presets in VibePresets.ts for each cartoon style
+
+---
+
+## Milestone 3: Animation Timeline ✅
+
+**Data model:** Implemented in `AnimationClip.ts`
+```typescript
+interface AnimClip {
+  name: string;
+  duration: number;          // in seconds
+  loop: boolean;
+  tracks: AnimTrack[];
+}
+interface AnimTrack {
+  targetNode: string;        // scene node name
+  property: 'position' | 'rotation' | 'scale';
+  keyframes: Keyframe[];
+}
+interface Keyframe {
+  time: number;
+  value: [number, number, number];
+  easing: 'linear' | 'step' | 'bezier';
+}
+```
+
+**Timeline UI:** Implemented in `AnimationTimeline.ts`
+- Canvas-based keyframe track editor with ruler, playhead, and diamond markers
+- Playback controls: play, pause, stop, loop toggle
+- Interactive scrubber with drag support
+- Click-to-select keyframes, double-click to add new keyframes
+- Zoom controls (50–800 px/sec)
+- Track evaluation with linear/step/bezier interpolation
+
+**N64 export:** Implemented in `N64AnimExporter.ts`
+Bake at 30fps → fixed-point arrays → emit as C header included by entity .c file.
+- 16.16 fixed-point for position/scale
+- 0–65535 range for rotation (maps to 0–360°)
+- Max 120 frames (4s) per clip
+- Include guards and static const arrays
+
+---
+
+## Milestone 4: Vibe Coding Node ✅
+
+**Concept:** In the Node-Graph, add a "🎙 Vibe" node. User types natural language:
+> *"patrol between point A and B, play attack animation when player is within 3 units"*
+
+Claude API generates the Node-Graph JSON config (state machine + transitions) which gets deserialized back into the graph canvas.
+
+**Implementation:**
+- `VibeNode.ts` — Enhanced with multi-turn chat support (`chat()` method), conversation history, and `buildChatSystemPrompt()` for conversational AI workflow
+- `VibeChatPanel.ts` — Chat-based UI panel with:
+  - Message history with user/assistant bubble rendering
+  - Inline NodeGraphConfig patch previews with "Apply" buttons
+  - Quick-action buttons (Patrol, Chase, Animate, Collectible, Door/Switch, Damage)
+  - Context-aware entity badge
+  - Keyboard shortcuts (Enter to send, Shift+Enter for newline)
+
+**IPC flow:**
+```
+VibeChatPanel.ts (renderer)
+  → VibeNode.chat(prompt, context, chatOpts)
+    → IPC: 'vibe:chat' + prompt + history
+      → main process
+        → Anthropic API (claude-sonnet) with conversation history
+          → returns text + optional NodeGraphConfig JSON
+      → IPC reply
+    → VibeChatPanel renders assistant message
+    → If patch found: render "Apply" button → onApplyPatch callback
+```
+
+**Key constraint:** Output must be a valid subset of Pyrite64's Node-Graph format — no heap allocations, no dynamic strings. The system prompt enforces this.
+
+---
+
+## Immediate Next Steps
+
+1. `npm install three @types/three postprocessing` in the editor package
+2. Create `src/renderer/viewport/Viewport3D.ts` (stub provided separately)
+3. Wire the viewport canvas into the main editor layout HTML
+4. Create `src/renderer/viewport/N64MaterialBridge.ts` to map Fast64 material JSON → `THREE.MeshToonMaterial`
+5. Add N64 polygon budget overlay (red highlight > 64 tris per mesh)
+
+---
+
+## N64 Constraints Cheat Sheet (for viewport accuracy)
+
+| Constraint | Value | Notes |
+|---|---|---|
+| Texture sizes | 32, 64, 128, 256 px | 256 only with big-tex mode |
+| Vertex colors | 8-bit per channel | Quantize preview |
+| Max tris/mesh | ~64 recommended | RDP display list limits |
+| Coordinate system | Y-up, Z-forward | Same as Three.js default |
+| Fixed-point coords | 16.16 | Sub-unit precision limit |
+| Max verts/frame | ~800 (safe) | Budget warning in viewport |
+| Audio channels | 32 (RSP mixer) | |
+| RDRAM total | 8MB (4MB base) | Asset budget bar |

@@ -104,12 +104,15 @@ export function ReportingAnalytics({ jobs, candidates }: ReportingAnalyticsProps
         if (!recruiters[c.recruiterName]) {
           recruiters[c.recruiterName] = { name: c.recruiterName, placements: 0, grossBilled: 0, grossDisbursed: 0, onboardedCount: 0, avgScore: 80 };
         }
-        if (c.status === 'active' || c.status === 'onboarded') {
-          recruiters[c.recruiterName].onboardedCount += 1;
-        }
-        // Incorporate performance scores
-        if (c.performanceScore) {
-          recruiters[c.recruiterName].avgScore = (recruiters[c.recruiterName].avgScore * 4 + c.performanceScore) / 5;
+        const recruiter = recruiters[c.recruiterName];
+        if (recruiter) {
+          if (c.status === 'active' || c.status === 'onboarded') {
+            recruiter.onboardedCount += 1;
+          }
+          // Incorporate performance scores
+          if (c.performanceScore) {
+            recruiter.avgScore = (recruiter.avgScore * 4 + c.performanceScore) / 5;
+          }
         }
       }
     });
@@ -120,10 +123,13 @@ export function ReportingAnalytics({ jobs, candidates }: ReportingAnalyticsProps
         if (!recruiters[j.recruiterName]) {
           recruiters[j.recruiterName] = { name: j.recruiterName, placements: 0, grossBilled: 0, grossDisbursed: 0, onboardedCount: 0, avgScore: 80 };
         }
-        if (j.contractorId) {
-          recruiters[j.recruiterName].placements += 1;
-          recruiters[j.recruiterName].grossBilled += j.charge;
-          recruiters[j.recruiterName].grossDisbursed += j.payout;
+        const recruiter = recruiters[j.recruiterName];
+        if (recruiter) {
+          if (j.contractorId) {
+            recruiter.placements += 1;
+            recruiter.grossBilled += j.charge;
+            recruiter.grossDisbursed += j.payout;
+          }
         }
       }
     });

@@ -1,0 +1,23 @@
+{
+  "name": "NavGroup",
+  "category": "navigation",
+  "description": "Sidebar navigation group with collapsible header and NavItem children",
+  "propsSchema": {
+    "label": {
+      "type": "string",
+      "required": true,
+      "description": "Group label"
+    },
+    "icon": {
+      "type": "ReactNode",
+      "required": false,
+      "description": "Optional icon"
+    },
+    "children": {
+      "type": "ReactNode",
+      "required": false,
+      "description": "NavItem children"
+    }
+  },
+  "template": "import React from 'react';\n\ninterface NavGroupProps {\n  label: string;\n  icon?: React.ReactNode;\n  children?: React.ReactNode;\n}\n\nexport function NavGroup({ label, icon, children }: NavGroupProps) {\n  return (\n    <div style={{ marginBottom: '8px' }}>\n      <div\n        style={{\n          display: 'flex',\n          alignItems: 'center',\n          gap: '8px',\n          padding: '6px 8px',\n          fontSize: '{{token:typography.scale.xs}}',\n          fontWeight: '{{token:typography.weight.semibold}}',\n          color: '{{token:colors.text.muted}}',\n          textTransform: 'uppercase',\n          letterSpacing: '0.08em',\n          fontFamily: '{{token:typography.fontFamily.body}}',\n        }}\n      >\n        {icon && <span>{icon}</span>}\n        <span>{label}</span>\n      </div>\n      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>\n        {children}\n      </div>\n    </div>\n  );\n}\n\ninterface NavItemProps {\n  label: string;\n  icon?: React.ReactNode;\n  active?: boolean;\n  onClick?: () => void;\n  href?: string;\n}\n\nexport function NavItem({ label, icon, active = false, onClick, href }: NavItemProps) {\n  const style: React.CSSProperties = {\n    display: 'flex',\n    alignItems: 'center',\n    gap: '10px',\n    padding: '8px 12px',\n    borderRadius: '8px',\n    fontSize: '{{token:typography.scale.sm}}',\n    fontWeight: active ? '{{token:typography.weight.medium}}' : '{{token:typography.weight.regular}}',\n    color: active ? '{{token:colors.text.primary}}' : '{{token:colors.text.secondary}}',\n    background: active ? '{{token:colors.glass.tint}}' : 'transparent',\n    backdropFilter: active ? '{{token:blur.elevation.1}}' : 'none',\n    transition: '{{token:animation.transition.default}}',\n    cursor: 'pointer',\n    textDecoration: 'none',\n    border: 'none',\n    width: '100%',\n    textAlign: 'left',\n    fontFamily: '{{token:typography.fontFamily.body}}',\n  };\n\n  if (href) {\n    return <a href={href} style={style}>{icon && <span>{icon}</span>}<span>{label}</span></a>;\n  }\n  return <button onClick={onClick} style={style}>{icon && <span>{icon}</span>}<span>{label}</span></button>;\n}\n"
+}

@@ -103,8 +103,9 @@ export function ClientPortalView({
           
           <div className="mt-4 flex sm:mt-0 gap-3">
             <div>
-              <label className="block text-[9px] uppercase font-bold text-[#8E9299] mb-1">Active Client Account</label>
+              <label htmlFor="active-company" className="block text-[9px] uppercase font-bold text-[#8E9299] mb-1">Active Client Account</label>
               <select 
+                id="active-company"
                 value={activeCompany} 
                 onChange={e => setActiveCompany(e.target.value)}
                 className="bg-[#1F232B] border border-[#373A43] text-xs text-white rounded p-2 focus:ring-[#10B981] font-bold"
@@ -158,6 +159,9 @@ export function ClientPortalView({
                   <div 
                     key={b.id} 
                     onClick={() => setSelectedBranchFilter(b.name)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedBranchFilter(b.name); }}
+                    role="button"
+                    tabIndex={0}
                     className={`p-4 rounded-lg border transition-all cursor-pointer ${
                       isMatchingSelection 
                         ? 'bg-[#1f232b] border-emerald-500/40 shadow-md' 

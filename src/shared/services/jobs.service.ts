@@ -43,6 +43,8 @@ function mapJob(row: Record<string, unknown>): Job {
     payrollExpenses: row.payroll_expenses as number | undefined,
     payrollDeductions: row.payroll_deductions as number | undefined,
     checklist: [],
+    verificationStatus: (row.verification_status as Job['verificationStatus']) ?? 'pending',
+    applicationResponseSLA: row.application_response_sla as string | undefined,
   }
 }
 

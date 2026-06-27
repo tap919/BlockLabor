@@ -1,0 +1,130 @@
+{
+  "project": {
+    "name": "OverCoat",
+    "tagline": "The open-source AI coding assistant that runs everywhere",
+    "version": "0.1.0",
+    "description": "A powerful, extensible AI coding assistant with persistent background agents, multi-LLM support, and secure WASM-based tool execution. Outperforms Claude Code with continuous improvement agents, deep repository understanding, and automated workflows.",
+    "license": "MIT",
+    "homepage": "https://github.com/yourusername/overcoat",
+    "repository": "yourusername/overcoat"
+  },
+  "stack": {
+    "core": {
+      "language": "Rust",
+      "framework": "actix-web",
+      "runtime": "tokio"
+    },
+    "sandbox": {
+      "primary": "WASM (wasmtime)",
+      "optional": "Docker"
+    },
+    "llm": {
+      "providers": [
+        "Ollama",
+        "DeepSeek",
+        "Gemini",
+        "GitHub Copilot",
+        "OpenAI",
+        "Any OpenAI-compatible endpoint"
+      ],
+      "integration": "Multi-provider router with unified interface"
+    },
+    "indexing": {
+      "parser": "tree-sitter",
+      "vector_db": "sqlite-vec (embedded) / Qdrant",
+      "search": "Hybrid (full-text + embeddings)"
+    },
+    "ui": {
+      "desktop": "Tauri",
+      "ide_plugin": "WebSocket (VSCode / Cursor / Zed) + HTTP (JetBrains / PyCharm)"
+    },
+    "storage": {
+      "database": "SQLite",
+      "provenance": "git"
+    }
+  },
+  "features": {
+    "agentic_coding": [
+      "Repo graph + symbol search",
+      "Multi-file edit with hunk approval",
+      "Test/debug loops (run-fail-patch-repeat)",
+      "Refactor/migrate campaigns with git checkpoints",
+      "Docs/PR generation from diffs"
+    ],
+    "background_agents": [
+      "24/7 agent queues (background tasks, automation)",
+      "Persistent TODO hunter",
+      "Tech debt scanner",
+      "Automated dependency updates",
+      "Background refactoring suggestions"
+    ],
+    "overcoat_exclusives": [
+      "Dynamic WASM tool builder",
+      "Multi-LLM routing + fusion",
+      "Low-spec mode (2GB RAM optimized)",
+      "Persistent health agents"
+    ],
+    "marathon_coding": [
+      "Automatic session checkpoints every 30 minutes",
+      "Break reminders every 90 minutes",
+      "Session statistics: duration, tokens, files modified",
+      "Context continuity across interruptions",
+      "Session summary export to .overcoat/sessions/"
+    ],
+    "completion_cache": [
+      "LRU cache with configurable maxSize and TTL",
+      "Deduplicates identical requests (same messages + model + temperature)",
+      "getOrFetch() helper wraps any completion function",
+      "Hit/miss/eviction statistics via getStats()",
+      "purgeExpired() for manual TTL sweep"
+    ],
+    "context_compression": [
+      "Exact-duplicate message removal",
+      "Per-message truncation with configurable maxMessageChars",
+      "Token-budget trimming (drops oldest user/assistant pairs)",
+      "System messages always preserved",
+      "Lightweight char-based token estimation (no external tokeniser needed)"
+    ],
+    "code_quality": [
+      "Pattern-based scorer for TypeScript, JavaScript, Python, Go, Java, Rust",
+      "Detects: empty catches, TODO markers, eval(), hardcoded secrets, any types, debug logging",
+      "Returns 0-100 score plus issue list with severity and line number",
+      "CI-style passes() gate with configurable severity threshold",
+      "Language detection from file extension or code heuristics"
+    ]
+  },
+  "architecture": {
+    "channels": [
+      "REPL (CLI)",
+      "WebSocket (IDE)",
+      "HTTP API (remote agents)",
+      "Background worker (routines)"
+    ],
+    "components": {
+      "context_engine": "AST index + embeddings + project CLAUDE.md parser",
+      "tool_orchestrator": "MCP protocol + Rust tool registry + dynamic WASM loader",
+      "llm_router": "Prompt templates + model selection + tool calling",
+      "sandbox_runner": "Isolated exec with leak protection + telemetry",
+      "ui_bridge": "Live diffs + status streaming"
+    },
+    "data_flow": "User task \u2192 Planner \u2192 Context fetch \u2192 Tool plan \u2192 Sandbox exec \u2192 Iterate \u2192 Report"
+  },
+  "milestones": {
+    "week1": "Fork ironclaw \u2192 LLM swap \u2192 basic code tools (read/write/run)",
+    "week2": "Repo indexing + test loop agent \u2192 VSCode plugin",
+    "week3": "Background agent queues \u2192 persistent TODO hunter",
+    "week4": "Multi-LLM routing + low-spec mode \u2192 ship v0.1"
+  },
+  "monetization": {
+    "channels": [
+      "Gumroad pro features ($10/mo)",
+      "GitHub sponsors",
+      "Enterprise white-label ($5k/yr)",
+      "NFT skills marketplace (future)"
+    ]
+  },
+  "tech_debt": {
+    "immediate": "model config UI, VSCode extension interop layer",
+    "nice": "GPU offload, voice mode"
+  }
+}

@@ -85,6 +85,8 @@ export interface Job {
   vendorName?: string; // The outsourced vendor name
   incidentsCount?: number;
   isOutsourced?: boolean;
+  verificationStatus?: 'pending' | 'verified' | 'flagged' | 'audited';
+  applicationResponseSLA?: string | null;
 }
 
 export interface WorkerCandidate {
@@ -99,6 +101,7 @@ export interface WorkerCandidate {
   backgroundCheckStatus: 'not_started' | 'pending' | 'passed' | 'failed';
   eSignStatus: 'unsigned' | 'sent' | 'signed';
   verifiedCredentials: string[]; // List of credential IDs
+  workerVerificationStatus?: 'pending' | 'verified' | 'flagged' | 'audited';
   // Worker Self-Service & Experience details
   weeklyAvailability?: Record<string, boolean>; // Sunday-Saturday
   shiftPreferences?: string[]; // ['morning', 'afternoon', 'night']
@@ -183,6 +186,23 @@ export interface SystemLog {
 }
 
 export type SimulatorRole = 'owner' | 'recruiter' | 'scheduler' | 'payroll' | 'client' | 'worker';
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  role: SimulatorRole;
+  name?: string;
+  branchId?: string;
+  branchName?: string;
+  trustTier?: number;
+}
+
+export interface AuthState {
+  user: SessionUser | null;
+  session: import('@supabase/supabase-js').Session | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+}
 
 export interface BranchDivision {
   id: string;

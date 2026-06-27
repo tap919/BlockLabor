@@ -385,9 +385,9 @@ export function BillingInvoicing({ jobs, candidates, onAddLog, onChangeJobStatus
                 
                 <form onSubmit={handleAddSurcharge} className="space-y-2 text-xs">
                   <div>
-                    <label className="block text-[9px] text-zinc-500 uppercase font-mono mb-0.5">Surcharge / Adjustment Name</label>
+                    <label htmlFor="surcharge-name" className="block text-[9px] text-zinc-500 uppercase font-mono mb-0.5">Surcharge / Adjustment Name</label>
                     <input
-                      type="text"
+                      id="surcharge-name"
                       required
                       placeholder="e.g. ACH Admin Processing Fee"
                       value={newSurchargeName}
@@ -396,9 +396,9 @@ export function BillingInvoicing({ jobs, candidates, onAddLog, onChangeJobStatus
                     />
                   </div>
                   <div>
-                    <label className="block text-[9px] text-zinc-500 uppercase font-mono mb-0.5">Charge Amount ($)</label>
+                    <label htmlFor="charge-amount" className="block text-[9px] text-zinc-500 uppercase font-mono mb-0.5">Charge Amount ($)</label>
                     <input
-                      type="number"
+                      id="charge-amount"
                       required
                       min={1}
                       placeholder="e.g. 15.00"

@@ -1,0 +1,24 @@
+{
+  "name": "GlassCard",
+  "category": "surface",
+  "description": "Glassmorphic card surface with backdrop blur and highlight border",
+  "propsSchema": {
+    "children": {
+      "type": "ReactNode",
+      "required": false,
+      "description": "Card content"
+    },
+    "className": {
+      "type": "string",
+      "required": false,
+      "description": "Additional CSS class names"
+    }
+  },
+  "template": "import React from 'react';\n\ninterface GlassCardProps {\n  children?: React.ReactNode;\n  className?: string;\n  style?: React.CSSProperties;\n}\n\nexport function GlassCard({ children, className, style }: GlassCardProps) {\n  return (\n    <div\n      className={className}\n      style={{\n        backdropFilter: '{{token:blur.elevation.1}}',\n        background: '{{token:colors.glass.tint}}',\n        border: `1px solid {{token:colors.glass.highlight}}`,\n        borderRadius: '{{token:spacing.card.borderRadius}}',\n        padding: '{{token:spacing.card.padding}}',\n        boxShadow: `0 8px 32px {{token:colors.glass.shadow}}`,\n        transition: '{{token:animation.transition.glass}}',\n        ...style,\n      }}\n    >\n      {children}\n    </div>\n  );\n}\n",
+  "variants": {
+    "compact": {
+      "description": "Compact card with reduced padding",
+      "template": "import React from 'react';\n\ninterface GlassCardProps {\n  children?: React.ReactNode;\n  className?: string;\n}\n\nexport function GlassCard({ children, className }: GlassCardProps) {\n  return (\n    <div\n      className={className}\n      style={{\n        backdropFilter: '{{token:blur.elevation.1}}',\n        background: '{{token:colors.glass.tint}}',\n        border: `1px solid {{token:colors.glass.highlight}}`,\n        borderRadius: '12px',\n        padding: '12px',\n        boxShadow: `0 4px 16px {{token:colors.glass.shadow}}`,\n      }}\n    >\n      {children}\n    </div>\n  );\n}\n"
+    }
+  }
+}

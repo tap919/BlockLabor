@@ -6,6 +6,7 @@ import { BookingForm } from './BookingForm';
 import { RateCardSummary } from './RateCardSummary';
 import { CompliancePanel } from './CompliancePanel';
 import { BookingSuccessCard } from './BookingSuccessCard';
+import { BusinessOnboarding } from './BusinessOnboarding';
 import { calculateJobData } from './booking.utils';
 import { BranchDivision, RateCard, VerticalType, BlockType } from '../../shared/types/domain';
 
@@ -31,11 +32,13 @@ export function BookingPage({ onBookJob, setView, isEnterprise = false, branches
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [lastCreatedId, setLastCreatedId] = useState('');
+  const [businessVerified, setBusinessVerified] = useState<string | null>(null);
 
   useEffect(() => {
     const cats = CATEGORIES_BY_VERTICAL[values.selectedVertical] || [];
-    if (cats.length > 0) {
-      setValues(prev => ({ ...prev, selectedCategory: cats[0] }));
+    const first = cats[0];
+    if (first) {
+      setValues(prev => ({ ...prev, selectedCategory: first }));
     }
   }, [values.selectedVertical]);
 
@@ -78,7 +81,18 @@ export function BookingPage({ onBookJob, setView, isEnterprise = false, branches
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <motion.div 
+          {!businessVerified && (
+            <div className="lg:col-span-3">
+              <BusinessOnboarding
+                onComplete={(name) => {
+                  setBusinessVerified(name)
+                  setValues(prev => ({ ...prev, businessName: name }))
+                }}
+              />
+            </div>
+          )}
+          {businessVerified && (
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="lg:col-span-2 bg-[#161920] p-6 sm:p-8 rounded-xl border border-[#2A2D35]"
@@ -101,10 +115,13 @@ export function BookingPage({ onBookJob, setView, isEnterprise = false, branches
               <RateCardSummary selectedBlockId={values.selectedBlockId} />
             </div>
           </motion.div>
+          )}
 
+          {businessVerified && (
           <div className="space-y-6">
             <CompliancePanel activeWorkflow={activeWorkflow} selectedVertical={values.selectedVertical} />
           </div>
+          )}
         </div>
       </div>
     </div>

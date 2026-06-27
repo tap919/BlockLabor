@@ -1,0 +1,28 @@
+{
+  "name": "@openclaw/extension-otm-agent",
+  "version": "0.1.0",
+  "description": "OTM Agent (Out The Mud) extension for TapClaw - bootstrapping system for micro-entrepreneurship",
+  "keywords": [
+    "bootstrapping",
+    "finance",
+    "micro-entrepreneurship",
+    "openclaw",
+    "otm",
+    "tapclaw",
+    "trading"
+  ],
+  "license": "MIT",
+  "author": "TapClaw Team",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {
+    "openclaw": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "typescript": "^5.7.3"
+  }
+}

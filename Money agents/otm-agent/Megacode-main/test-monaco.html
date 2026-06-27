@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monaco Test</title>
+    <style>
+        body { margin: 0; padding: 0; height: 100vh; background: #1e1e1e; color: #fff; }
+        #container { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <script>
+        // Test Monaco loading
+        console.log('Starting Monaco test...');
+        
+        // Configure Monaco
+        window.require.config({ paths: { vs: '/monaco/vs' } });
+        window.MonacoEnvironment = {
+            getWorkerUrl: function () {
+                return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+                    self.MonacoEnvironment = { baseUrl: '/monaco/' };
+                    importScripts('/monaco/vs/base/worker/workerMain.js');
+                `)}`;
+            }
+        };
+        
+        // Load Monaco
+        window.require(['vs/editor/editor.main'], function () {
+            console.log('Monaco loaded successfully!');
+            
+            // Create editor
+            const editor = monaco.editor.create(document.getElementById('container'), {
+                value: '// Test Monaco Editor\nconsole.log("Hello Monaco!");',
+                language: 'javascript',
+                theme: 'vs-dark',
+                automaticLayout: true
+            });
+            
+            console.log('Editor created:', editor);
+        }, function (error) {
+            console.error('Failed to load Monaco:', error);
+        });
+    </script>
+</body>
+</html>

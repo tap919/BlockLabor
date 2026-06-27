@@ -1,0 +1,198 @@
+name: Deferred Pipeline Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'n64/engine/src/renderer/deferred/**'
+      - 'n64/engine/include/renderer/deferred/**'
+      - 'n64/examples/deferred_tests/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'n64/engine/src/renderer/deferred/**'
+      - 'n64/engine/include/renderer/deferred/**'
+      - 'n64/examples/deferred_tests/**'
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Set up N64 toolchain
+      uses: n64dever/setup-n64-toolchain@v1
+      with:
+        toolchain-version: 'latest'
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential git make python3 python3-pip
+        pip3 install --user -r requirements.txt 2>/dev/null || true
+        
+    - name: Build engine with deferred pipeline
+      run: |
+        cd n64/engine
+        make clean
+        make DEFERRED_RENDERING=1 TESTING_FRAMEWORK=1
+        
+    - name: Build deferred test suite
+      run: |
+        cd n64/examples/deferred_tests
+        make clean
+        make
+        
+    - name: Run hardware validation tests
+      run: |
+        cd n64/engine
+        ./test_deferred_runner --suite hardware --output hardware_results.json
+        cat hardware_results.json
+        
+    - name: Run performance benchmarks
+      run: |
+        cd n64/engine
+        ./test_deferred_runner --suite performance --output performance_results.json
+        cat performance_results.json
+        
+    - name: Run stress tests
+      run: |
+        cd n64/engine
+        ./test_deferred_runner --suite stress --output stress_results.json
+        cat stress_results.json
+        
+    - name: Run visual regression tests
+      run: |
+        cd n64/engine
+        ./test_deferred_runner --suite visual --output visual_results.json
+        cat visual_results.json
+        
+    - name: Generate test report
+      run: |
+        cd n64/engine
+        ./test_deferred_runner --report --output test_report.html
+        
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          n64/engine/*_results.json
+          n64/engine/test_report.html
+          n64/engine/test_results_*.log
+        retention-days: 7
+        
+    - name: Check test results
+      run: |
+        # Check if any tests failed
+        if [ -f "n64/engine/hardware_results.json" ]; then
+          FAILED_TESTS=$(grep -c '"failed": [1-9]' n64/engine/hardware_results.json || true)
+          if [ "$FAILED_TESTS" -gt 0 ]; then
+            echo "Hardware validation tests failed!"
+            exit 1
+          fi
+        fi
+        
+        if [ -f "n64/engine/performance_results.json" ]; then
+          FAILED_TESTS=$(grep -c '"failed": [1-9]' n64/engine/performance_results.json || true)
+          if [ "$FAILED_TESTS" -gt 0 ]; then
+            echo "Performance benchmark tests failed!"
+            exit 1
+          fi
+        fi
+        
+        echo "All tests passed!"
+        
+  emulator-test:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Download test artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: test-results
+        path: test-results/
+        
+    - name: Set up emulator
+      run: |
+        # Install ares emulator for N64 testing
+        sudo apt-get update
+        sudo apt-get install -y ares
+        
+    - name: Run emulator tests
+      run: |
+        echo "Emulator testing would run here"
+        echo "This would execute the test ROM in an emulator"
+        echo "and verify the visual output matches expectations"
+        
+    - name: Upload emulator results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: emulator-results
+        path: emulator_results/
+        retention-days: 7
+        
+  deploy-docs:
+    runs-on: ubuntu-latest
+    needs: [build-and-test, emulator-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download test artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: test-results
+        path: test-results/
+        
+    - name: Generate documentation
+      run: |
+        mkdir -p docs/test-reports
+        cp test-results/*.html docs/test-reports/
+        cp test-results/*.json docs/test-reports/
+        
+        # Generate markdown summary
+        cat > docs/test-reports/SUMMARY.md << 'EOF'
+        # Deferred Pipeline Test Results
+        
+        ## Latest Test Run
+        - Date: $(date)
+        - Commit: ${{ github.sha }}
+        - Branch: ${{ github.ref }}
+        
+        ## Test Results
+        - Hardware Validation: $(jq -r '.summary.pass_rate' test-results/hardware_results.json 2>/dev/null || echo "N/A")%
+        - Performance Benchmarks: $(jq -r '.summary.pass_rate' test-results/performance_results.json 2>/dev/null || echo "N/A")%
+        - Stress Tests: $(jq -r '.summary.pass_rate' test-results/stress_results.json 2>/dev/null || echo "N/A")%
+        - Visual Regression: $(jq -r '.summary.pass_rate' test-results/visual_results.json 2>/dev/null || echo "N/A")%
+        
+        ## Detailed Reports
+        - [HTML Report](test_report.html)
+        - [Hardware Results](hardware_results.json)
+        - [Performance Results](performance_results.json)
+        - [Stress Test Results](stress_results.json)
+        - [Visual Regression Results](visual_results.json)
+        EOF
+        
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs
+        keep_files: true

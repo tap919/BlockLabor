@@ -1,0 +1,332 @@
+// Autonomous Agent Sandbox - Database Schema
+// Supports multi-agent coordination, ERV policy engine, paper trading, and audit trails
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CORE ENTITIES
+// ============================================================================
+
+/// Users with role-based access control
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("viewer") // admin, analyst, viewer
+  apiKey    String?  @unique // For API access
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects     Project[]
+  approvals    HumanApproval[]
+  auditLogs    AuditLog[]
+}
+
+/// Projects are the main entities that agents work on
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("draft") // draft, running, paused, completed, failed
+  mode        String   @default("simulation") // simulation, live
+  createdBy   String?  // User ID or 'system' for automated projects
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  user        User?          @relation(fields: [createdBy], references: [id])
+  phases      Phase[]
+  executions  AgentExecution[]
+  messages    AgentMessage[]
+  portfolio   Portfolio?
+  approvals   HumanApproval[]
+  auditLogs   AuditLog[]
+}
+
+// ============================================================================
+// AGENT SYSTEM
+// ============================================================================
+
+/// Agent definitions - each agent type in the system
+model Agent {
+  id          String   @id @default(cuid())
+  name        String   @unique // sentinel, cipher, guardian, oracle, vector, ledger
+  displayName String
+  description String
+  version     String   @default("1.0.0")
+  icon        String?  // Lucide icon name
+  color       String?  // Tailwind color class
+  enabled     Boolean  @default(true)
+  config      String?  // JSON config for agent
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  executions  AgentExecution[]
+}
+
+/// Workflow phases - stages of project execution
+model Phase {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  displayName String
+  description String?
+  order       Int      // Execution order
+  status      String   @default("pending") // pending, running, completed, failed, skipped
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  outputs     PhaseOutput[]
+  executions  AgentExecution[]
+}
+
+/// Phase outputs - structured results from each phase
+model PhaseOutput {
+  id          String   @id @default(cuid())
+  phaseId     String
+  agentName   String
+  outputType  String   // analysis, recommendation, data, decision
+  content     String   // JSON content
+  confidence  Float?   // 0-1 confidence score
+  metadata    String?  // Additional JSON metadata
+  createdAt   DateTime @default(now())
+
+  phase       Phase    @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  ervDecision ERVDecision?
+}
+
+// ============================================================================
+// AGENT EXECUTION ENGINE
+// ============================================================================
+
+/// Agent execution records - tracks each agent run
+model AgentExecution {
+  id           String   @id @default(cuid())
+  projectId    String
+  phaseId      String
+  agentId      String
+  status       String   @default("pending") // pending, running, completed, failed, timeout
+  input        String?  // JSON input data
+  output       String?  // JSON output data
+  error        String?  // Error message if failed
+  duration     Int?     // Execution time in ms
+  tokensUsed   Int?     // LLM tokens consumed
+  cost         Float?   // API cost in USD
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase        Phase    @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  agent        Agent    @relation(fields: [agentId], references: [id])
+  auditLogs    AuditLog[]
+}
+
+/// Inter-agent messages - communication protocol
+model AgentMessage {
+  id           String   @id @default(cuid())
+  projectId    String
+  fromAgent    String
+  toAgent      String   // "orchestrator" for broadcast
+  messageType  String   // request, response, notification, verification
+  action       String   // Specific action being performed
+  payload      String   // JSON payload
+  status       String   @default("sent") // sent, delivered, processed, failed
+  priority     Int      @default(0) // Higher = more urgent
+  createdAt    DateTime @default(now())
+  processedAt  DateTime?
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// ERV (EXECUTE/REFUSE/VERIFY) POLICY ENGINE
+// ============================================================================
+
+/// ERV policy rules - define what actions are allowed
+model ERVPolicy {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String   // financial, security, compliance, operational
+  pattern     String   // Regex or pattern to match
+  action      String   // execute, refuse, verify
+  priority    Int      @default(0) // Higher priority rules evaluated first
+  conditions  String?  // JSON conditions for context-aware rules
+  enabled     Boolean  @default(true)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  decisions   ERVDecision[]
+}
+
+/// ERV decisions - log of all policy decisions
+model ERVDecision {
+  id           String   @id @default(cuid())
+  policyId     String?
+  phaseOutputId String @unique
+  action       String   // execute, refuse, verify
+  reasoning    String   // Explanation of the decision
+  confidence   Float?   // Confidence in the decision
+  context      String?  // JSON context data used
+  overridden   Boolean  @default(false) // Was this overridden by human?
+  overriddenBy String?
+  overriddenAt DateTime?
+  createdAt    DateTime @default(now())
+
+  policy       ERVPolicy?   @relation(fields: [policyId], references: [id])
+  phaseOutput  PhaseOutput  @relation(fields: [phaseOutputId], references: [id])
+  approval     HumanApproval?
+}
+
+/// Human-in-the-loop approvals
+model HumanApproval {
+  id          String   @id @default(cuid())
+  projectId   String
+  ervDecisionId String @unique
+  requester   String   // Agent that requested approval
+  action      String   // Action needing approval
+  context     String   // JSON context
+  status      String   @default("pending") // pending, approved, rejected, expired
+  reviewedBy  String?
+  reviewNotes String?
+  createdAt   DateTime @default(now())
+  reviewedAt  DateTime?
+  expiresAt   DateTime?
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ervDecision ERVDecision  @relation(fields: [ervDecisionId], references: [id])
+  reviewer    User?        @relation(fields: [reviewedBy], references: [id])
+}
+
+// ============================================================================
+// AUDIT & COMPLIANCE
+// ============================================================================
+
+/// Immutable audit log - tamper-proof record of all actions
+model AuditLog {
+  id           String   @id @default(cuid())
+  projectId    String?
+  executionId  String?
+  userId       String?
+  actor        String   // User or agent that performed the action
+  action       String   // What action was performed
+  resource     String   // What resource was affected
+  details      String   // JSON details of the action
+  hash         String   // SHA-256 hash for integrity
+  previousHash String?  // Hash of previous log entry (chain)
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  project      Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  execution    AgentExecution?   @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// ============================================================================
+// FINANCIAL DATA & PAPER TRADING
+// ============================================================================
+
+/// Cached financial data - reduces API calls
+model FinancialData {
+  id          String   @id @default(cuid())
+  symbol      String
+  dataType    String   // price, fundamental, economic, news
+  source      String   // alpha_vantage, fred, yahoo
+  data        String   // JSON data
+  fetchedAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@unique([symbol, dataType, source])
+}
+
+/// Virtual portfolio for paper trading
+model Portfolio {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  cash        Float    @default(100000) // Starting cash
+  totalValue  Float    @default(100000)
+  dayPnL      Float    @default(0)
+  totalPnL    Float    @default(0)
+  sharpeRatio Float?
+  var95       Float?   // Value at Risk (95%)
+  maxDrawdown Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  positions   Position[]
+  transactions Transaction[]
+}
+
+/// Portfolio positions
+model Position {
+  id           String   @id @default(cuid())
+  portfolioId  String
+  symbol       String
+  quantity     Float
+  avgCost      Float
+  currentPrice Float?
+  marketValue  Float?
+  unrealizedPnL Float?
+  openedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  portfolio    Portfolio   @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+}
+
+/// Simulated transactions
+model Transaction {
+  id           String   @id @default(cuid())
+  portfolioId  String
+  symbol       String
+  type         String   // buy, sell, dividend, split
+  quantity     Float
+  price        Float
+  total        Float
+  executedBy   String   // Agent that executed the trade
+  ervDecision  String?  // ERV decision that approved this
+  executedAt   DateTime @default(now())
+
+  portfolio    Portfolio   @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// SYSTEM CONFIGURATION
+// ============================================================================
+
+/// System configuration and feature flags
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  type      String   // string, number, boolean, json
+  category  String   // general, api, agent, trading
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// API rate limiting and quotas
+model ApiQuota {
+  id          String   @id @default(cuid())
+  service     String   @unique // alpha_vantage, fred, openai
+  dailyLimit  Int
+  usedToday   Int      @default(0)
+  resetAt     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Money Agents - Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-neutral-950 text-white min-h-screen p-4">
+  <header class="bg-gradient-to-br from-emerald-500 to-emerald-700 p-8 rounded-2xl mb-8">
+    <h1 class="text-4xl font-bold">🚀 OTM Agent</h1>
+    <p class="text-emerald-50 mt-2">AI-Powered Revenue Generation</p>
+  </header>
+
+  <main class="max-w-4xl mx-auto">
+    <section class="bg-neutral-900 border border-neutral-800 rounded-xl p-6 mb-6">
+      <h2 class="text-2xl font-bold mb-4">🔗 Server Connection</h2>
+      <div class="flex gap-4">
+        <input id="serverUrl" type="text" value="http://127.0.0.1:8010" class="flex-1 bg-neutral-800 border border-neutral-700 rounded px-4 py-2">
+        <button onclick="checkHealth()" class="bg-emerald-500 px-6 py-2 rounded font-bold">Connect</button>
+      </div>
+      <div id="status" class="mt-4 text-neutral-400"></div>
+    </section>
+
+    <section class="bg-neutral-900 border border-neutral-800 rounded-xl p-6 mb-6">
+      <h2 class="text-2xl font-bold mb-4">🏈 Run Analysis</h2>
+      <div class="flex gap-4 mb-4">
+        <select id="sport" class="bg-neutral-800 border border-neutral-700 rounded px-4 py-2">
+          <option value="NBA">NBA</option>
+          <option value="NFL">NFL</option>
+        </select>
+        <input type="number" id="bankroll" value="500" class="bg-neutral-800 border border-neutral-700 rounded px-4 py-2 w-32">
+        <button onclick="runAnalysis()" class="bg-emerald-500 px-6 py-2 rounded font-bold">Run</button>
+      </div>
+      <pre id="results" class="bg-neutral-800 p-4 rounded text-sm">Click Run...</pre>
+    </section>
+
+    <section class="bg-neutral-900 border border-neutral-800 rounded-xl p-6">
+      <h2 class="text-2xl font-bold mb-4">📋 Receipts</h2>
+      <div id="receipts" class="text-neutral-400">No receipts yet</div>
+    </section>
+  </main>
+
+  <script>
+    let receipts = [];
+
+    async function checkHealth() {
+      const url = document.getElementById('serverUrl').value;
+      const el = document.getElementById('status');
+      el.innerHTML = '<span class="text-amber-500">Checking...</span>';
+      try {
+        const r = await fetch(url + '/health');
+        const d = await r.json();
+        el.innerHTML = `<span class="text-emerald-500">✓ Connected</span> - v${d.version}`;
+      } catch (e) {
+        el.innerHTML = `<span class="text-red-500">✗ ${e.message}</span><br>
+          Run on your machine:<br>
+          <code style="background:#333;padding:2px 6px;border-radius:4px">cd Sports-Steve-main/new_sports_steve/backend && python -m uvicorn main:app --port 8010</code>`;
+      }
+    }
+
+    async function runAnalysis() {
+      const url = document.getElementById('serverUrl').value;
+      const sport = document.getElementById('sport').value;
+      const bankroll = parseFloat(document.getElementById('bankroll').value) || 500;
+      const el = document.getElementById('results');
+      el.textContent = 'Loading...';
+      
+      try {
+        const r = await fetch(url + '/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sport, bankroll, max_risk_pct: 2.0 })
+        });
+        const d = await r.json();
+        el.textContent = JSON.stringify(d, null, 2);
+        
+        receipts.unshift({
+          id: 'rec_' + Date.now(),
+          agent: 'Hermes',
+          strategy: 'sports_steve_' + sport,
+          status: 'Validated'
+        });
+        updateReceipts();
+      } catch (e) {
+        el.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function updateReceipts() {
+      const el = document.getElementById('receipts');
+      el.innerHTML = receipts.map(r => 
+        `<div class="bg-neutral-800 p-2 rounded mb-2">
+          <span class="text-emerald-400">${r.agent}</span> → ${r.strategy}
+          <span class="text-xs text-neutral-500 ml-2">${r.status}</span>
+        </div>`
+      ).join('');
+    }
+  </script>
+</body>
+</html>

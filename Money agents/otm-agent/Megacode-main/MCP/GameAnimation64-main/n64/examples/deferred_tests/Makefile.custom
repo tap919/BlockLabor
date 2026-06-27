@@ -1,0 +1,50 @@
+# Deferred Pipeline Test Suite Makefile
+# Custom configuration for deferred rendering tests
+
+# Source files
+USER_SRC = \
+    src/user/DeferredTestRunner.cpp \
+    src/user/globalSetup.cpp
+
+# Include paths
+USER_INC = \
+    -I../../engine/include \
+    -I../../engine/include/renderer/deferred
+
+# Linker flags
+USER_LDFLAGS = \
+    -L../../engine/build \
+    -lengine \
+    -ldeferred_renderer
+
+# Compiler flags
+USER_CFLAGS = \
+    -DDEFERRED_RENDERING=1 \
+    -DTESTING_FRAMEWORK=1 \
+    -DPERFORMANCE_BENCHMARKING=1
+
+# Scene configuration
+SCENES = \
+    data/scenes/1_scene.json \
+    data/scenes/2_scene.json \
+    data/scenes/3_scene.json
+
+# Build targets
+all: build
+
+build:
+	@echo "Building deferred pipeline test suite..."
+	@mkdir -p build
+	@cp -r data build/
+	@echo "Build complete"
+
+clean:
+	@echo "Cleaning deferred pipeline test suite..."
+	@rm -rf build
+	@echo "Clean complete"
+
+test: build
+	@echo "Running deferred pipeline tests..."
+	@echo "Test suite ready for execution"
+
+.PHONY: all build clean test

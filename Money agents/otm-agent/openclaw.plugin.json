@@ -1,0 +1,105 @@
+{
+  "id": "otm-agent",
+  "name": "OTM Agent",
+  "description": "Out The Mud bootstrapping system for micro-entrepreneurship and small-scale trading",
+  "version": "0.1.0",
+  "author": "TapClaw Team",
+  "license": "MIT",
+  "homepage": "https://github.com/openclaw/openclaw/tree/main/extensions/otm-agent",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclaw/openclaw.git",
+    "directory": "extensions/otm-agent"
+  },
+  "keywords": [
+    "openclaw",
+    "tapclaw",
+    "otm",
+    "micro-entrepreneurship",
+    "bootstrapping",
+    "trading",
+    "finance",
+    "opportunity-scanning",
+    "ai-analysis"
+  ],
+  "categories": ["finance", "trading", "productivity"],
+  "main": "index.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "openclaw": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "apiUrl": {
+        "type": "string",
+        "description": "OTM Agent API URL",
+        "default": "http://localhost:3000"
+      },
+      "apiKey": {
+        "type": "string",
+        "description": "OTM Agent API key",
+        "secret": true
+      },
+      "webhookSecret": {
+        "type": "string",
+        "description": "Webhook secret for OTM Agent notifications",
+        "secret": true
+      },
+      "scanInterval": {
+        "type": "number",
+        "description": "Scan interval in seconds",
+        "default": 300,
+        "minimum": 60,
+        "maximum": 3600
+      },
+      "maxOpportunities": {
+        "type": "number",
+        "description": "Maximum opportunities to return per scan",
+        "default": 50,
+        "minimum": 1,
+        "maximum": 200
+      },
+      "minScoreThreshold": {
+        "type": "number",
+        "description": "Minimum score threshold (0-100)",
+        "default": 70,
+        "minimum": 0,
+        "maximum": 100
+      },
+      "platforms": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Platforms to scan",
+        "default": ["upwork", "fiverr", "reddit", "clickworker"]
+      },
+      "bankroll": {
+        "type": "number",
+        "description": "Starting bankroll amount",
+        "default": 0,
+        "minimum": 0
+      },
+      "hoursPerDay": {
+        "type": "number",
+        "description": "Hours available per day for execution",
+        "default": 2,
+        "minimum": 1,
+        "maximum": 24
+      }
+    }
+  },
+  "provides": ["otm-agent"],
+  "compatibility": {
+    "openclaw": ">=1.0.0"
+  }
+}

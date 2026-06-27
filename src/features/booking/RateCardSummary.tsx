@@ -1,7 +1,7 @@
 import { PRICING_BLOCKS } from '../../constants';
 
 export function RateCardSummary({ selectedBlockId }: { selectedBlockId: string }) {
-  const activeBlock = PRICING_BLOCKS.find(b => b.id === selectedBlockId) || PRICING_BLOCKS[1];
+  const activeBlock = PRICING_BLOCKS.find(b => b.id === selectedBlockId) ?? PRICING_BLOCKS[0] ?? PRICING_BLOCKS[1]!;
   
   return (
     <div className="text-xs text-[#8E9299]">

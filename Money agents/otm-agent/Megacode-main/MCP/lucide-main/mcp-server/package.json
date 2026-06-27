@@ -1,0 +1,25 @@
+{
+  "name": "lucide-mcp",
+  "version": "1.0.0",
+  "description": "Lucide icon library MCP server - search, browse, and retrieve 1700+ open source icons",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": { "lucide-mcp": "dist/index.js" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": ["mcp", "icons", "lucide", "svg", "ui"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.7.3"
+  }
+}

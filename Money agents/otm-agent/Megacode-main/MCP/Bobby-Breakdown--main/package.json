@@ -1,0 +1,177 @@
+{
+  "name": "bobby-breakdown",
+  "displayName": "Bobby Breakdown",
+  "description": "AI-powered idea breakdowns for coding, biotech, fintech, marketing & game dev — powered by Claude",
+  "version": "1.0.0",
+  "publisher": "bobby-breakdown",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "Education", "Machine Learning"],
+  "keywords": ["AI", "Claude", "Anthropic", "breakdown", "explain", "biotech", "fintech", "gaming", "learning"],
+  "activationEvents": [],
+  "main": "dist-mcp/index.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bobbyBreakdown.openPanel",
+        "title": "Bobby Breakdown: Open Panel",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "bobbyBreakdown.breakdownSelection",
+        "title": "Bobby Breakdown: Break Down Selected Text"
+      },
+      {
+        "command": "bobbyBreakdown.processBook",
+        "title": "Bobby Breakdown: Process Book / Document → LLM Guide"
+      },
+      {
+        "command": "bobbyBreakdown.setApiKey",
+        "title": "Bobby Breakdown: Set Anthropic API Key"
+      },
+      {
+        "command": "bobbyBreakdown.quickExplain",
+        "title": "Bobby Breakdown: Quick Explain (One-Click)",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "bobbyBreakdown.addCustomDomain",
+        "title": "Bobby Breakdown: Add Custom Domain"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "bobbyBreakdown.breakdownSelection",
+          "when": "editorHasSelection",
+          "group": "bobbyBreakdown@1"
+        },
+        {
+          "command": "bobbyBreakdown.quickExplain",
+          "when": "editorHasSelection",
+          "group": "bobbyBreakdown@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "bobbyBreakdown.quickExplain",
+          "when": "editorHasSelection",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "bobbyBreakdown.openPanel",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b"
+      },
+      {
+        "command": "bobbyBreakdown.breakdownSelection",
+        "key": "ctrl+shift+x",
+        "mac": "cmd+shift+x",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "bobbyBreakdown.quickExplain",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "Bobby Breakdown",
+      "properties": {
+        "bobbyBreakdown.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Anthropic API key (or set ANTHROPIC_API_KEY env var)"
+        },
+        "bobbyBreakdown.defaultDomain": {
+          "type": "string",
+          "default": "coding",
+          "enum": ["coding", "biotech", "fintech", "marketing", "gamedev", "devops", "aiml", "web"],
+          "description": "Default domain for breakdowns"
+        },
+        "bobbyBreakdown.defaultFormat": {
+          "type": "string",
+          "default": "structured",
+          "enum": ["structured", "eli5", "technical", "visual", "quickfire", "pm", "designer", "founder", "scientist", "rapper", "redflag", "walkthrough", "plan", "fixerror"],
+          "enumDescriptions": [
+            "Structured breakdown with sections",
+            "Explain Like I'm 5 — simple language",
+            "Deep technical breakdown",
+            "ASCII/text visual map",
+            "Rapid-fire punchy summary",
+            "Project Manager perspective",
+            "UX/UI Designer perspective",
+            "Startup Founder perspective",
+            "Scientist / first-principles perspective",
+            "Street-smart vivid language",
+            "Security-focused red flag analysis",
+            "Step-by-step code walkthrough for understanding unfamiliar code",
+            "Implementation plan — break a task into actionable steps with starter code",
+            "Error decoder — root cause analysis and step-by-step fix"
+          ],
+          "description": "Default breakdown format"
+        },
+        "bobbyBreakdown.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-20250514",
+          "description": "Claude model to use"
+        },
+        "bobbyBreakdown.customDomains": {
+          "type": "array",
+          "default": [],
+          "description": "Custom domain definitions. Each entry has 'name' and 'prompt'.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "description": "Domain name" },
+              "prompt": { "type": "string", "description": "System prompt for this domain" }
+            }
+          }
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bobbyBreakdown",
+          "title": "Bobby Breakdown",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "bobbyBreakdown": [
+        {
+          "type": "webview",
+          "id": "bobbyBreakdown.mainView",
+          "name": "Bobby Breakdown"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "build:mcp": "tsc -p tsconfig.mcp.json",
+    "start:mcp": "node dist-mcp/index.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "20.x",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.23.8"
+  }
+}

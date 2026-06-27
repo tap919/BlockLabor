@@ -483,6 +483,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           role: string
+          trust_tier: number | null
         }
         Insert: {
           branch_id?: string | null
@@ -492,6 +493,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           role: string
+          trust_tier?: number | null
         }
         Update: {
           branch_id?: string | null
@@ -501,6 +503,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           role?: string
+          trust_tier?: number | null
         }
       }
     }

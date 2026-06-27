@@ -1,6 +1,7 @@
-import { useState, DragEvent, ChangeEvent, FormEvent } from 'react';
+import { useState, useMemo, DragEvent, ChangeEvent, FormEvent } from 'react';
 import { Job, WorkerCandidate, IncidentReport } from '../../../shared/types/domain';
 import { motion, AnimatePresence } from 'motion/react';
+import VerifiedStamp from '../../../components/ui/VerifiedStamp';
 import { 
   MapPin, DollarSign, Clock, ShieldCheck, CheckSquare, 
   Smartphone, BellRing, Navigation as NavIcon, FileSignature, 
@@ -32,13 +33,17 @@ export function ContractorPortalView({
 }: ContractorPortalProps) {
   // Available contractors to choose from
   const activeContractors = candidates.filter(c => c.status === 'active' || c.status === 'onboarded');
-  const defaultWorker = activeContractors[0] || candidates[0];
-
-  const [activeWorkerId, setActiveWorkerId] = useState<string>(defaultWorker.id);
-  const currentWorker = candidates.find(c => c.id === activeWorkerId) || defaultWorker;
+  const defaultWorker = activeContractors[0] ?? candidates[0];
 
   // Track sub-tabs
   const [currentTab, setCurrentTab] = useState<SubTab>('jobs');
+  const [activeWorkerId, setActiveWorkerId] = useState<string>(defaultWorker?.id ?? '');
+
+  // Derived current worker - updates when activeWorkerId or candidates change
+  const currentWorker = useMemo(() => 
+    candidates.find(c => c.id === activeWorkerId) ?? defaultWorker!,
+    [activeWorkerId, candidates, defaultWorker]
+  );
 
   // Job List Filters inside worker experience
   const openJobs = jobs.filter(j => j.status === 'open' && currentWorker.verticals.includes(j.vertical));
@@ -63,6 +68,18 @@ export function ContractorPortalView({
 
   // Drag and drop simulator states
   const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  // If there is no candidate, render an empty state
+  if (!candidates.length || !defaultWorker) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8 text-center text-zinc-400">
+        <div>
+          <h2 className="text-xl font-semibold text-white mb-2">No contractor profile available</h2>
+          <p className="text-sm">Once a candidate is onboarded, this portal will populate with their shifts.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleOptInJob = (jobId: string) => {
     if (currentWorker.status !== 'active') {
@@ -783,9 +800,9 @@ export function ContractorPortalView({
                   {/* Vault options selector form */}
                   <div className="space-y-2.5 bg-black/30 p-3 rounded-lg border border-zinc-800">
                     <div className="text-xs">
-                      <label className="block text-[9px] uppercase tracking-widest text-[#8E9299] font-bold mb-1">Document Specification</label>
-                      <select 
-                        value={selectedUploadDocType}
+                    <label htmlFor="doc-type" className="block text-[9px] uppercase tracking-widest text-[#8E9299] font-bold mb-1">Document Specification</label>
+                    <select 
+                      id="doc-type"
                         onChange={e => setSelectedUploadDocType(e.target.value)}
                         className="w-full bg-[#1F232B] border border-zinc-700 rounded p-1.5 text-[11px] text-white focus:border-[#10B981] outline-none"
                       >
@@ -799,9 +816,9 @@ export function ContractorPortalView({
                     </div>
 
                     <div className="text-xs">
-                      <label className="block text-[9px] uppercase tracking-widest text-[#8E9299] font-bold mb-1">Expiration Date Selector (Optional)</label>
-                      <input 
-                        type="date"
+                    <label htmlFor="expiry-date" className="block text-[9px] uppercase tracking-widest text-[#8E9299] font-bold mb-1">Expiration Date Selector (Optional)</label>
+                    <input 
+                      id="expiry-date"
                         value={customExpiryInput}
                         onChange={e => setCustomExpiryInput(e.target.value)}
                         className="w-full bg-[#1F232B] border border-zinc-700 rounded p-1.5 text-[11px] text-white focus:border-[#10B981] outline-none font-mono"
@@ -974,9 +991,16 @@ export function ContractorPortalView({
         {/* Header Block */}
         <header className="md:flex md:items-center md:justify-between bg-[#161920] rounded-xl p-6 border border-[#2A2D35]">
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-bold leading-7 text-white sm:truncate font-sans tracking-tight">
-              Independent Contractor Console: <span className="text-[#10B981]">{currentWorker.name}</span>
-            </h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-xl font-bold leading-7 text-white sm:truncate font-sans tracking-tight">
+                Independent Contractor Console: <span className="text-[#10B981]">{currentWorker.name}</span>
+              </h2>
+              <VerifiedStamp
+                status={currentWorker.workerVerificationStatus || 'pending'}
+                size="md"
+                showTier={false}
+              />
+            </div>
             <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:space-x-6">
               <div className="mt-2 flex items-center text-xs text-[#8E9299]">
                 <ShieldCheck className="mr-1.5 h-4 w-4 flex-shrink-0 text-[#10B981]" aria-hidden="true" />
@@ -1319,9 +1343,9 @@ export function ContractorPortalView({
                     <form onSubmit={handleSavePayOption} className="space-y-4 max-w-lg">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-3">
-                          <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">Bank Name</label>
+                          <label htmlFor="bank-name" className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">Bank Name</label>
                           <input
-                            type="text"
+                            id="bank-name"
                             required
                             placeholder="Bank Name (e.g., Chase)"
                             value={bankName}
@@ -1330,9 +1354,9 @@ export function ContractorPortalView({
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">Routing Number</label>
+                          <label htmlFor="routing-number" className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">Routing Number</label>
                           <input
-                            type="text"
+                            id="routing-number"
                             required
                             placeholder="9 digit code"
                             value={routingNum}
@@ -1341,9 +1365,9 @@ export function ContractorPortalView({
                           />
                         </div>
                         <div className="sm:col-span-2">
-                          <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">Account Number</label>
+                          <label htmlFor="account-number" className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">Account Number</label>
                           <input
-                            type="text"
+                            id="account-number"
                             required
                             placeholder="Account number"
                             value={accountNum}
@@ -1392,9 +1416,9 @@ export function ContractorPortalView({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase font-bold text-[#8E9299]">Onboarding Document Type</label>
+                      <label htmlFor="onboarding-doc-type" className="block text-[10px] uppercase font-bold text-[#8E9299]">Onboarding Document Type</label>
                       <select 
-                        value={selectedUploadDocType}
+                        id="onboarding-doc-type"
                         onChange={e => setSelectedUploadDocType(e.target.value)}
                         className="w-full bg-[#1F232B] border border-[#373A43] text-xs text-white p-2.5 rounded focus:border-[#10B981] outline-none cursor-pointer"
                       >
@@ -1408,9 +1432,9 @@ export function ContractorPortalView({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase font-bold text-[#8E9299]">Optional Expiration Calendar</label>
+                      <label htmlFor="optional-expiry" className="block text-[10px] uppercase font-bold text-[#8E9299]">Optional Expiration Calendar</label>
                       <input 
-                        type="date"
+                        id="optional-expiry"
                         value={customExpiryInput}
                         onChange={e => setCustomExpiryInput(e.target.value)}
                         className="w-full bg-[#1F232B] border border-[#373A43] text-xs text-white p-2 text-center rounded focus:border-[#10B981] outline-none font-mono"

@@ -12,7 +12,7 @@ export function BookingSuccessCard({
   onReset,
   onGoToDashboard
 }: any) {
-  const activeBlock = PRICING_BLOCKS.find(b => b.id === selectedBlockId) || PRICING_BLOCKS[1];
+  const activeBlock = PRICING_BLOCKS.find(b => b.id === selectedBlockId) ?? PRICING_BLOCKS[0] ?? PRICING_BLOCKS[1]!;
 
   return (
     <div className="min-h-screen py-24 px-6 sm:px-8 bg-[#0F1115] flex items-center justify-center">

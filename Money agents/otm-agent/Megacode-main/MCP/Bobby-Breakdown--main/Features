@@ -1,0 +1,47 @@
+```json
+[
+  {
+    "name": "Save Breakdown as Snippet",
+    "description": "Save any generated breakdown as a reusable snippet in VS Code's snippet system, with customizable prefixes and scope."
+  },
+  {
+    "name": "Export to Markdown",
+    "description": "Export breakdowns or LLM guides as formatted Markdown files, ready for documentation or sharing."
+  },
+  {
+    "name": "History Panel",
+    "description": "Automatically store recent breakdowns locally and provide a history view to revisit or reuse previous explanations."
+  },
+  {
+    "name": "Multi-Selection Breakdown",
+    "description": "Allow users to select multiple disjointed text blocks and receive a combined breakdown that relates the concepts."
+  },
+  {
+    "name": "Quick Domain Switcher",
+    "description": "Add a toolbar with one-click buttons to switch between the five expert domains without reopening the panel."
+  },
+  {
+    "name": "Concept Comparison",
+    "description": "Enter two concepts (or select two pieces of text) and get a side‑by‑side comparison highlighting similarities and differences."
+  },
+  {
+    "name": "Follow-up Questions",
+    "description": "After a breakdown, enable a simple chat interface to ask clarifying questions and get concise follow‑up explanations."
+  },
+  {
+    "name": "Custom Domain Builder",
+    "description": "Let users define their own domain by providing a name and custom prompt instructions, stored in settings."
+  },
+  {
+    "name": "Word & Token Counter",
+    "description": "Display the word count and estimated token count of the generated breakdown to help manage context limits."
+  },
+  {
+    "name": "Pin to Sidebar",
+    "description": "Allow users to pin important breakdowns to a dedicated section in the sidebar for quick reference across sessions."
+  }
+]
+```
+    "name": "One‑Click Explain",
+    "description": "Adds a button next to selections or in the editor toolbar to instantly break down the selected text using the current default settings, without opening the panel."
+  },

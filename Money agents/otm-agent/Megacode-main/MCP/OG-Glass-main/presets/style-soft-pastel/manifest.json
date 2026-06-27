@@ -1,0 +1,12 @@
+{
+  "id": "style-soft-pastel",
+  "name": "Soft Pastel",
+  "description": "Light lavender backgrounds, dreamy pastel accents, generous border-radius. Friendly, gentle, approachable UI.",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["style", "pastel", "light", "soft", "friendly", "rounded"],
+  "styleCategory": "pastel",
+  "designPrinciples": ["soft-color-harmony", "generous-rounding", "gentle-contrast", "airy-spacing", "approachable-tone"],
+  "components": [],
+  "layouts": []
+}

@@ -1,0 +1,12 @@
+{
+  "id": "style-brutalist",
+  "name": "Brutalist Raw",
+  "description": "Bold, raw, no-frills design. Stark black on white, zero border-radius, heavy typography, maximum contrast.",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["style", "brutalist", "bold", "stark", "high-contrast", "raw"],
+  "styleCategory": "brutalist",
+  "designPrinciples": ["form-follows-function", "zero-decoration", "maximum-contrast", "heavy-type", "visible-structure"],
+  "components": [],
+  "layouts": []
+}

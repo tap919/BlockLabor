@@ -1,0 +1,4166 @@
+#!/usr/bin/env node
+
+/**
+ * RuVector MCP Server
+ *
+ * Model Context Protocol server for RuVector hooks
+ * Provides self-learning intelligence tools for Claude Code
+ *
+ * Usage:
+ *   npx ruvector mcp start
+ *   claude mcp add ruvector npx ruvector mcp start
+ */
+
+// Signal that this is an MCP server (enables parallel workers for embeddings)
+process.env.MCP_SERVER = '1';
+
+const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+} = require('@modelcontextprotocol/sdk/types.js');
+const path = require('path');
+const fs = require('fs');
+const { execSync, execFileSync } = require('child_process');
+
+// ── Security Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Validate a file path argument for RVF operations.
+ * Prevents path traversal and restricts to safe locations.
+ */
+function validateRvfPath(filePath) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Path must be a non-empty string');
+  }
+  // Block null bytes
+  if (filePath.includes('\0')) {
+    throw new Error('Path contains null bytes');
+  }
+  // Resolve to absolute, then canonicalize via realpath if it exists
+  let resolved = path.resolve(filePath);
+  try {
+    // Resolve symlinks for existing paths to prevent symlink-based escapes
+    resolved = fs.realpathSync(resolved);
+  } catch {
+    // Path doesn't exist yet — resolve the parent directory
+    const parentDir = path.dirname(resolved);
+    try {
+      const realParent = fs.realpathSync(parentDir);
+      resolved = path.join(realParent, path.basename(resolved));
+    } catch {
+      // Parent doesn't exist either — keep the resolved path for the block check
+    }
+  }
+  // Confine to the current working directory
+  const cwd = process.cwd();
+  if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+    // Also block sensitive system paths regardless
+    const blocked = ['/etc', '/proc', '/sys', '/dev', '/boot', '/root', '/var/run', '/var/log', '/tmp'];
+    for (const prefix of blocked) {
+      if (resolved.startsWith(prefix)) {
+        throw new Error(`Access denied: path resolves to '${resolved}' which is outside the working directory and in restricted area '${prefix}'`);
+      }
+    }
+    // Allow paths outside cwd only if they're not in blocked directories
+    // (for tools that reference project files by absolute path)
+  }
+  return resolved;
+}
+
+/**
+ * Sanitize a shell argument to prevent command injection.
+ * Strips shell metacharacters and limits length.
+ */
+function sanitizeShellArg(arg) {
+  if (typeof arg !== 'string') return '';
+  // Remove null bytes, backticks, $(), quotes, newlines, and other shell metacharacters
+  return arg
+    .replace(/\0/g, '')
+    .replace(/[\r\n]/g, '')
+    .replace(/[`$(){}|;&<>!'"\\]/g, '')
+    .replace(/\.\./g, '')
+    .slice(0, 4096);
+}
+
+/**
+ * Validate a numeric argument (returns integer or default).
+ * Prevents injection via numeric-looking fields.
+ */
+function sanitizeNumericArg(arg, defaultVal) {
+  const n = parseInt(arg, 10);
+  return Number.isFinite(n) && n > 0 ? n : (defaultVal || 0);
+}
+
+// ── Proxy-aware fetch wrapper ───────────────────────────────────────────────
+let _proxyDispatcherSet = false;
+
+function getProxyUrl(targetUrl) {
+  const NO_PROXY = process.env.NO_PROXY || process.env.no_proxy || '';
+  if (NO_PROXY === '*') return null;
+  if (NO_PROXY) {
+    try {
+      const host = new URL(targetUrl).hostname.toLowerCase();
+      const patterns = NO_PROXY.split(',').map(p => p.trim().toLowerCase());
+      for (const p of patterns) {
+        if (!p) continue;
+        if (host === p || host.endsWith(p.startsWith('.') ? p : '.' + p)) return null;
+      }
+    } catch {}
+  }
+  return process.env.HTTPS_PROXY || process.env.https_proxy
+      || process.env.HTTP_PROXY  || process.env.http_proxy
+      || process.env.ALL_PROXY   || process.env.all_proxy
+      || null;
+}
+
+async function proxyFetch(url, opts) {
+  const target = typeof url === 'string' ? url : url.toString();
+  const proxy = getProxyUrl(target);
+  if (!proxy) return fetch(url, opts);
+
+  if (!_proxyDispatcherSet) {
+    try {
+      const undici = require('undici');
+      if (undici.ProxyAgent && undici.setGlobalDispatcher) {
+        undici.setGlobalDispatcher(new undici.ProxyAgent(proxy));
+        _proxyDispatcherSet = true;
+      }
+    } catch {}
+  }
+  if (_proxyDispatcherSet) return fetch(url, opts);
+
+  const { execFileSync } = require('child_process');
+  const args = ['-sS', '-L', '--max-time', '30'];
+  if (opts && opts.method) { args.push('-X', opts.method); }
+  if (opts && opts.headers) {
+    for (const [k, v] of Object.entries(opts.headers)) {
+      args.push('-H', `${k}: ${v}`);
+    }
+  }
+  if (opts && opts.body) { args.push('-d', typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)); }
+  args.push(target);
+  try {
+    const stdout = execFileSync('curl', args, { encoding: 'utf8', timeout: 35000 });
+    const body = stdout.trim();
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => body,
+      json: async () => JSON.parse(body),
+      headers: new Map(),
+    };
+  } catch (e) {
+    const msg = e.stderr ? e.stderr.toString().trim() : e.message;
+    throw new Error(`Proxy curl failed: ${msg}`);
+  }
+}
+
+// Try to load the full IntelligenceEngine
+let IntelligenceEngine = null;
+let engineAvailable = false;
+
+try {
+  const core = require('../dist/core/intelligence-engine.js');
+  IntelligenceEngine = core.IntelligenceEngine || core.default;
+  engineAvailable = true;
+} catch (e) {
+  // IntelligenceEngine not available
+}
+
+// Intelligence class with full RuVector stack support
+class Intelligence {
+  constructor() {
+    this.intelPath = this.getIntelPath();
+    this.data = this.load();
+    this.engine = null;
+
+    // Initialize full engine if available
+    if (engineAvailable && IntelligenceEngine) {
+      try {
+        this.engine = new IntelligenceEngine({
+          embeddingDim: 256,
+          maxMemories: 100000,
+          enableSona: true,
+          enableAttention: true,
+        });
+        // Import existing data
+        if (this.data) {
+          this.engine.import(this.convertLegacyData(this.data), true);
+        }
+      } catch (e) {
+        this.engine = null;
+      }
+    }
+  }
+
+  convertLegacyData(data) {
+    const converted = { memories: [], routingPatterns: {}, errorPatterns: {}, coEditPatterns: {} };
+    if (data.memories) {
+      converted.memories = data.memories.map(m => ({
+        id: m.id || `mem-${Date.now()}`,
+        content: m.content,
+        type: m.type || 'general',
+        embedding: m.embedding || [],
+        created: m.created || new Date().toISOString(),
+        accessed: 0,
+      }));
+    }
+    if (data.patterns) {
+      for (const [key, value] of Object.entries(data.patterns)) {
+        const [state, action] = key.split('|');
+        if (state && action) {
+          if (!converted.routingPatterns[state]) converted.routingPatterns[state] = {};
+          converted.routingPatterns[state][action] = value.q_value || value || 0.5;
+        }
+      }
+    }
+    return converted;
+  }
+
+  getIntelPath() {
+    const projectPath = path.join(process.cwd(), '.ruvector', 'intelligence.json');
+    const homePath = path.join(require('os').homedir(), '.ruvector', 'intelligence.json');
+    if (fs.existsSync(path.dirname(projectPath))) return projectPath;
+    if (fs.existsSync(path.join(process.cwd(), '.claude'))) return projectPath;
+    if (fs.existsSync(homePath)) return homePath;
+    return projectPath;
+  }
+
+  load() {
+    try {
+      if (fs.existsSync(this.intelPath)) {
+        return JSON.parse(fs.readFileSync(this.intelPath, 'utf-8'));
+      }
+    } catch {}
+    return { patterns: {}, memories: [], trajectories: [], errors: {}, agents: {}, edges: [] };
+  }
+
+  save() {
+    const dir = path.dirname(this.intelPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    // Export engine data if available
+    if (this.engine) {
+      try {
+        const engineData = this.engine.export();
+        this.data.engineStats = engineData.stats;
+      } catch {}
+    }
+
+    fs.writeFileSync(this.intelPath, JSON.stringify(this.data, null, 2));
+  }
+
+  stats() {
+    const baseStats = {
+      total_patterns: Object.keys(this.data.patterns || {}).length,
+      total_memories: (this.data.memories || []).length,
+      total_trajectories: (this.data.trajectories || []).length,
+      total_errors: Object.keys(this.data.errors || {}).length
+    };
+
+    if (this.engine) {
+      try {
+        const engineStats = this.engine.getStats();
+        return {
+          ...baseStats,
+          engineEnabled: true,
+          sonaEnabled: engineStats.sonaEnabled,
+          attentionEnabled: engineStats.attentionEnabled,
+          embeddingDim: engineStats.memoryDimensions,
+          totalMemories: engineStats.totalMemories,
+          totalEpisodes: engineStats.totalEpisodes,
+          trajectoriesRecorded: engineStats.trajectoriesRecorded,
+          patternsLearned: engineStats.patternsLearned,
+          microLoraUpdates: engineStats.microLoraUpdates,
+          ewcConsolidations: engineStats.ewcConsolidations,
+        };
+      } catch {}
+    }
+
+    return { ...baseStats, engineEnabled: false };
+  }
+
+  embed(text) {
+    if (this.engine) {
+      try {
+        return this.engine.embed(text);
+      } catch {}
+    }
+    // Fallback: 64-dim hash
+    const embedding = new Array(64).fill(0);
+    for (let i = 0; i < text.length; i++) {
+      const idx = (text.charCodeAt(i) + i * 7) % 64;
+      embedding[idx] += 1.0;
+    }
+    const norm = Math.sqrt(embedding.reduce((a, b) => a + b * b, 0));
+    if (norm > 0) for (let i = 0; i < embedding.length; i++) embedding[i] /= norm;
+    return embedding;
+  }
+
+  similarity(a, b) {
+    if (!a || !b || a.length !== b.length) return 0;
+    const dot = a.reduce((sum, v, i) => sum + v * b[i], 0);
+    const normA = Math.sqrt(a.reduce((sum, v) => sum + v * v, 0));
+    const normB = Math.sqrt(b.reduce((sum, v) => sum + v * v, 0));
+    return normA > 0 && normB > 0 ? dot / (normA * normB) : 0;
+  }
+
+  async remember(content, type = 'general') {
+    // Use engine if available (VectorDB storage)
+    if (this.engine) {
+      try {
+        const entry = await this.engine.remember(content, type);
+        // Also store in legacy format
+        this.data.memories = this.data.memories || [];
+        this.data.memories.push({ content, type, created: new Date().toISOString(), embedding: entry.embedding });
+        this.save();
+        return { stored: true, total: this.data.memories.length, engineStored: true };
+      } catch {}
+    }
+
+    // Fallback
+    this.data.memories = this.data.memories || [];
+    this.data.memories.push({ content, type, created: new Date().toISOString(), embedding: this.embed(content) });
+    this.save();
+    return { stored: true, total: this.data.memories.length };
+  }
+
+  async recall(query, topK = 5) {
+    // Use engine if available (HNSW search - 150x faster)
+    if (this.engine) {
+      try {
+        const results = await this.engine.recall(query, topK);
+        return results.map(r => ({
+          content: r.content,
+          type: r.type,
+          score: r.score || 0,
+          created: r.created,
+          engineResult: true
+        }));
+      } catch {}
+    }
+
+    // Fallback: brute-force
+    const queryEmbed = this.embed(query);
+    const scored = (this.data.memories || []).map((m, i) => ({
+      ...m,
+      index: i,
+      score: this.similarity(queryEmbed, m.embedding)
+    }));
+    return scored.sort((a, b) => b.score - a.score).slice(0, topK);
+  }
+
+  async route(task, file = null) {
+    // Use engine if available (SONA-enhanced routing)
+    if (this.engine) {
+      try {
+        const result = await this.engine.route(task, file);
+        return {
+          agent: result.agent,
+          confidence: result.confidence,
+          reason: result.reason,
+          alternates: result.alternates,
+          sonaPatterns: result.patterns?.length || 0,
+          engineRouted: true
+        };
+      } catch {}
+    }
+
+    // Fallback
+    const ext = file ? path.extname(file) : '';
+    const state = `edit:${ext || 'unknown'}`;
+    const actions = this.data.patterns[state] || {};
+
+    const defaults = {
+      '.rs': 'rust-developer',
+      '.ts': 'typescript-developer',
+      '.tsx': 'react-developer',
+      '.js': 'javascript-developer',
+      '.jsx': 'react-developer',
+      '.py': 'python-developer',
+      '.go': 'go-developer',
+      '.sql': 'database-specialist',
+      '.md': 'documentation-specialist'
+    };
+
+    let bestAgent = defaults[ext] || 'coder';
+    let bestScore = 0.5;
+
+    for (const [agent, score] of Object.entries(actions)) {
+      if (score > bestScore) {
+        bestAgent = agent;
+        bestScore = score;
+      }
+    }
+
+    return {
+      agent: bestAgent,
+      confidence: Math.min(bestScore, 1.0),
+      reason: Object.keys(actions).length > 0 ? 'learned from patterns' : 'default mapping'
+    };
+  }
+
+  getCapabilities() {
+    if (!this.engine) {
+      return { engine: false, vectorDb: false, sona: false, attention: false, embeddingDim: 64 };
+    }
+    try {
+      const stats = this.engine.getStats();
+      return {
+        engine: true,
+        vectorDb: true,
+        sona: stats.sonaEnabled,
+        attention: stats.attentionEnabled,
+        embeddingDim: stats.memoryDimensions,
+      };
+    } catch {
+      return { engine: true, vectorDb: false, sona: false, attention: false, embeddingDim: 256 };
+    }
+  }
+}
+
+// Create MCP server
+const server = new Server(
+  {
+    name: 'ruvector',
+    version: '0.2.16',
+  },
+  {
+    capabilities: {
+      tools: {},
+      resources: {},
+    },
+  }
+);
+
+const intel = new Intelligence();
+
+// Define tools
+const TOOLS = [
+  {
+    name: 'hooks_stats',
+    description: 'Get RuVector intelligence statistics including learned patterns, memories, and trajectories',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'hooks_route',
+    description: 'Route a task to the best agent based on learned patterns',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: { type: 'string', description: 'Task description' },
+        file: { type: 'string', description: 'File path (optional)' }
+      },
+      required: ['task']
+    }
+  },
+  {
+    name: 'hooks_remember',
+    description: 'Store context in vector memory for later recall',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'Content to remember' },
+        type: { type: 'string', description: 'Memory type (project, code, decision, context)', default: 'general' }
+      },
+      required: ['content']
+    }
+  },
+  {
+    name: 'hooks_recall',
+    description: 'Search vector memory for relevant context',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        top_k: { type: 'number', description: 'Number of results', default: 5 }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'hooks_init',
+    description: 'Initialize RuVector hooks in the current project',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pretrain: { type: 'boolean', description: 'Run pretrain after init', default: false },
+        build_agents: { type: 'string', description: 'Focus for agent generation (quality, speed, security, testing, fullstack)' },
+        force: { type: 'boolean', description: 'Force overwrite existing settings', default: false }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_pretrain',
+    description: 'Pretrain intelligence by analyzing the repository structure and git history',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        depth: { type: 'number', description: 'Git history depth to analyze', default: 100 },
+        skip_git: { type: 'boolean', description: 'Skip git history analysis', default: false },
+        verbose: { type: 'boolean', description: 'Show detailed progress', default: false }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_build_agents',
+    description: 'Generate optimized agent configurations based on repository analysis',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        focus: {
+          type: 'string',
+          description: 'Focus type for agent generation',
+          enum: ['quality', 'speed', 'security', 'testing', 'fullstack'],
+          default: 'quality'
+        },
+        include_prompts: { type: 'boolean', description: 'Include system prompts in agent configs', default: true }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_verify',
+    description: 'Verify that hooks are configured correctly',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'hooks_doctor',
+    description: 'Diagnose and optionally fix setup issues',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fix: { type: 'boolean', description: 'Automatically fix issues', default: false }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_export',
+    description: 'Export intelligence data for backup',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        include_all: { type: 'boolean', description: 'Include all data (patterns, memories, trajectories)', default: false }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_capabilities',
+    description: 'Get RuVector engine capabilities (VectorDB, SONA, Attention)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'hooks_import',
+    description: 'Import intelligence data from backup file',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        data: { type: 'object', description: 'Exported data object to import' },
+        merge: { type: 'boolean', description: 'Merge with existing data', default: true }
+      },
+      required: ['data']
+    }
+  },
+  {
+    name: 'hooks_swarm_recommend',
+    description: 'Get agent recommendation for a task type using learned patterns',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_type: { type: 'string', description: 'Type of task (research, code, test, review, debug, etc.)' },
+        file: { type: 'string', description: 'Optional file path for context' }
+      },
+      required: ['task_type']
+    }
+  },
+  {
+    name: 'hooks_suggest_context',
+    description: 'Get relevant context suggestions for the current task',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Current task or query' },
+        top_k: { type: 'number', description: 'Number of suggestions', default: 5 }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_trajectory_begin',
+    description: 'Begin tracking a new execution trajectory',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        context: { type: 'string', description: 'Task or operation context' },
+        agent: { type: 'string', description: 'Agent performing the task' }
+      },
+      required: ['context']
+    }
+  },
+  {
+    name: 'hooks_trajectory_step',
+    description: 'Add a step to the current trajectory',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', description: 'Action taken' },
+        result: { type: 'string', description: 'Result of action' },
+        reward: { type: 'number', description: 'Reward signal (0-1)', default: 0.5 }
+      },
+      required: ['action']
+    }
+  },
+  {
+    name: 'hooks_trajectory_end',
+    description: 'End the current trajectory with a quality score',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', description: 'Whether the task succeeded' },
+        quality: { type: 'number', description: 'Quality score (0-1)', default: 0.5 }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_coedit_record',
+    description: 'Record co-edit pattern (files edited together)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        primary_file: { type: 'string', description: 'Primary file being edited' },
+        related_files: { type: 'array', items: { type: 'string' }, description: 'Related files edited together' }
+      },
+      required: ['primary_file', 'related_files']
+    }
+  },
+  {
+    name: 'hooks_coedit_suggest',
+    description: 'Get suggested related files based on co-edit patterns',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Current file' },
+        top_k: { type: 'number', description: 'Number of suggestions', default: 5 }
+      },
+      required: ['file']
+    }
+  },
+  {
+    name: 'hooks_error_record',
+    description: 'Record an error and its fix for learning',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        error: { type: 'string', description: 'Error message or code' },
+        fix: { type: 'string', description: 'Fix that resolved the error' },
+        file: { type: 'string', description: 'File where error occurred' }
+      },
+      required: ['error', 'fix']
+    }
+  },
+  {
+    name: 'hooks_error_suggest',
+    description: 'Get suggested fixes for an error based on learned patterns',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        error: { type: 'string', description: 'Error message or code' }
+      },
+      required: ['error']
+    }
+  },
+  {
+    name: 'hooks_force_learn',
+    description: 'Force an immediate learning cycle',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  // ============================================
+  // NEW CAPABILITY TOOLS (AST, Diff, Coverage, Graph, Security, RAG)
+  // ============================================
+  {
+    name: 'hooks_ast_analyze',
+    description: 'Parse file AST and extract symbols, imports, complexity metrics',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'File path to analyze' }
+      },
+      required: ['file']
+    }
+  },
+  {
+    name: 'hooks_ast_complexity',
+    description: 'Get cyclomatic and cognitive complexity metrics for files',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        files: { type: 'array', items: { type: 'string' }, description: 'Files to analyze' },
+        threshold: { type: 'number', description: 'Warn if complexity exceeds threshold', default: 10 }
+      },
+      required: ['files']
+    }
+  },
+  {
+    name: 'hooks_diff_analyze',
+    description: 'Analyze git diff with semantic embeddings and risk scoring',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        commit: { type: 'string', description: 'Commit hash (defaults to staged changes)' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_diff_classify',
+    description: 'Classify change type (feature, bugfix, refactor, docs, test, config)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        commit: { type: 'string', description: 'Commit hash (defaults to HEAD)' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_diff_similar',
+    description: 'Find similar past commits based on diff embeddings',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        top_k: { type: 'number', description: 'Number of results', default: 5 },
+        commits: { type: 'number', description: 'Recent commits to search', default: 50 }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_coverage_route',
+    description: 'Get coverage-aware agent routing for a file',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'File to analyze' }
+      },
+      required: ['file']
+    }
+  },
+  {
+    name: 'hooks_coverage_suggest',
+    description: 'Suggest tests for files based on coverage data',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        files: { type: 'array', items: { type: 'string' }, description: 'Files to analyze' }
+      },
+      required: ['files']
+    }
+  },
+  {
+    name: 'hooks_graph_mincut',
+    description: 'Find optimal code boundaries using MinCut algorithm (Stoer-Wagner)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        files: { type: 'array', items: { type: 'string' }, description: 'Files to analyze' }
+      },
+      required: ['files']
+    }
+  },
+  {
+    name: 'hooks_graph_cluster',
+    description: 'Detect code communities using spectral or Louvain clustering',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        files: { type: 'array', items: { type: 'string' }, description: 'Files to analyze' },
+        method: { type: 'string', enum: ['spectral', 'louvain'], default: 'louvain' },
+        clusters: { type: 'number', description: 'Number of clusters (spectral only)', default: 3 }
+      },
+      required: ['files']
+    }
+  },
+  {
+    name: 'hooks_security_scan',
+    description: 'Parallel security vulnerability scan for common issues',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        files: { type: 'array', items: { type: 'string' }, description: 'Files to scan' }
+      },
+      required: ['files']
+    }
+  },
+  {
+    name: 'hooks_rag_context',
+    description: 'Get RAG-enhanced context for a query with optional reranking',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Query for context' },
+        top_k: { type: 'number', description: 'Number of results', default: 5 },
+        rerank: { type: 'boolean', description: 'Rerank results by relevance', default: false }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'hooks_git_churn',
+    description: 'Analyze git churn to find hot spots',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Number of days to analyze', default: 30 },
+        top: { type: 'number', description: 'Top N files', default: 10 }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_route_enhanced',
+    description: 'Enhanced routing using AST complexity, coverage, and diff analysis signals',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: { type: 'string', description: 'Task description' },
+        file: { type: 'string', description: 'File context' }
+      },
+      required: ['task']
+    }
+  },
+  {
+    name: 'hooks_attention_info',
+    description: 'Get available attention mechanisms and their configurations',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'hooks_gnn_info',
+    description: 'Get GNN layer capabilities and configuration',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  // Learning Engine Tools (v2.1)
+  {
+    name: 'hooks_learning_config',
+    description: 'Configure learning algorithms for different tasks. Supports 9 algorithms: q-learning, sarsa, double-q, actor-critic, ppo, decision-transformer, monte-carlo, td-lambda, dqn',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: {
+          type: 'string',
+          description: 'Task type: agent-routing, error-avoidance, confidence-scoring, trajectory-learning, context-ranking, memory-recall',
+          enum: ['agent-routing', 'error-avoidance', 'confidence-scoring', 'trajectory-learning', 'context-ranking', 'memory-recall']
+        },
+        algorithm: {
+          type: 'string',
+          description: 'Learning algorithm',
+          enum: ['q-learning', 'sarsa', 'double-q', 'actor-critic', 'ppo', 'decision-transformer', 'monte-carlo', 'td-lambda', 'dqn']
+        },
+        learningRate: { type: 'number', description: 'Learning rate (0.0-1.0)' },
+        discountFactor: { type: 'number', description: 'Discount factor gamma (0.0-1.0)' },
+        epsilon: { type: 'number', description: 'Exploration rate (0.0-1.0)' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_learning_stats',
+    description: 'Get learning algorithm statistics and performance metrics',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'hooks_learning_update',
+    description: 'Record a learning experience for a specific task',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: { type: 'string', description: 'Task type' },
+        state: { type: 'string', description: 'Current state' },
+        action: { type: 'string', description: 'Action taken' },
+        reward: { type: 'number', description: 'Reward received (-1 to 1)' },
+        nextState: { type: 'string', description: 'Next state (optional)' },
+        done: { type: 'boolean', description: 'Episode is done' }
+      },
+      required: ['task', 'state', 'action', 'reward']
+    }
+  },
+  {
+    name: 'hooks_learn',
+    description: 'Combined learning action: record experience and get best action recommendation',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        state: { type: 'string', description: 'Current state' },
+        action: { type: 'string', description: 'Action taken (optional)' },
+        reward: { type: 'number', description: 'Reward (-1 to 1, optional)' },
+        actions: { type: 'array', items: { type: 'string' }, description: 'Available actions for recommendation' },
+        task: { type: 'string', description: 'Task type', default: 'agent-routing' }
+      },
+      required: ['state']
+    }
+  },
+  {
+    name: 'hooks_algorithms_list',
+    description: 'List all available learning algorithms with descriptions',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  // TensorCompress Tools
+  {
+    name: 'hooks_compress',
+    description: 'Compress pattern storage using TensorCompress. Provides up to 10x memory savings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        force: { type: 'boolean', description: 'Force recompression of all patterns' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_compress_stats',
+    description: 'Get TensorCompress statistics: memory savings, compression levels, tensor counts',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'hooks_compress_store',
+    description: 'Store an embedding with adaptive compression',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Storage key' },
+        vector: { type: 'array', items: { type: 'number' }, description: 'Vector to store' },
+        level: { type: 'string', description: 'Compression level', enum: ['none', 'half', 'pq8', 'pq4', 'binary'] }
+      },
+      required: ['key', 'vector']
+    }
+  },
+  {
+    name: 'hooks_compress_get',
+    description: 'Retrieve a compressed embedding',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Storage key' }
+      },
+      required: ['key']
+    }
+  },
+  {
+    name: 'hooks_batch_learn',
+    description: 'Record multiple learning experiences in batch for efficiency. Processes an array of experiences at once.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        experiences: {
+          type: 'array',
+          description: 'Array of experiences to learn from',
+          items: {
+            type: 'object',
+            properties: {
+              state: { type: 'string', description: 'State identifier' },
+              action: { type: 'string', description: 'Action taken' },
+              reward: { type: 'number', description: 'Reward (-1 to 1)' },
+              nextState: { type: 'string', description: 'Next state (optional)' },
+              done: { type: 'boolean', description: 'Episode ended' }
+            },
+            required: ['state', 'action', 'reward']
+          }
+        },
+        task: { type: 'string', description: 'Task type for all experiences', default: 'agent-routing' }
+      },
+      required: ['experiences']
+    }
+  },
+  {
+    name: 'hooks_subscribe_snapshot',
+    description: 'Get current state snapshot for subscription-style updates. Returns counts and deltas since last call.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        events: {
+          type: 'array',
+          description: 'Event types to check',
+          items: { type: 'string', enum: ['learn', 'compress', 'route', 'memory'] },
+          default: ['learn', 'route']
+        },
+        lastState: {
+          type: 'object',
+          description: 'Previous state for delta calculation',
+          properties: {
+            patterns: { type: 'number' },
+            memories: { type: 'number' },
+            trajectories: { type: 'number' },
+            updates: { type: 'number' }
+          }
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'hooks_watch_status',
+    description: 'Get file watching status and recent changes detected',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  // ============================================
+  // BACKGROUND WORKERS TOOLS (via agentic-flow)
+  // ============================================
+  {
+    name: 'workers_dispatch',
+    description: 'Dispatch a background worker for analysis (ultralearn, optimize, audit, map, etc.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Prompt with trigger keyword (e.g., "ultralearn authentication")' }
+      },
+      required: ['prompt']
+    }
+  },
+  {
+    name: 'workers_status',
+    description: 'Get background worker status dashboard',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workerId: { type: 'string', description: 'Specific worker ID (optional)' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'workers_results',
+    description: 'Get analysis results from completed workers',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        json: { type: 'boolean', description: 'Return as JSON', default: false }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'workers_triggers',
+    description: 'List available trigger keywords for workers',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'workers_stats',
+    description: 'Get worker statistics (24h)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  // Custom Worker System (agentic-flow@alpha.39+)
+  {
+    name: 'workers_presets',
+    description: 'List available worker presets (quick-scan, deep-analysis, security-scan, learning, api-docs, test-analysis)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'workers_phases',
+    description: 'List available phase executors (24 phases including file-discovery, security-analysis, pattern-extraction)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'workers_create',
+    description: 'Create a custom worker from preset with composable phases',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Worker name' },
+        preset: { type: 'string', description: 'Base preset (quick-scan, deep-analysis, security-scan, learning, api-docs, test-analysis)' },
+        triggers: { type: 'string', description: 'Comma-separated trigger keywords' }
+      },
+      required: ['name']
+    }
+  },
+  {
+    name: 'workers_run',
+    description: 'Run a custom worker on target path',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Worker name' },
+        path: { type: 'string', description: 'Target path to analyze (default: .)' }
+      },
+      required: ['name']
+    }
+  },
+  {
+    name: 'workers_custom',
+    description: 'List registered custom workers',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'workers_init_config',
+    description: 'Generate example workers.yaml config file',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        force: { type: 'boolean', description: 'Overwrite existing config' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'workers_load_config',
+    description: 'Load custom workers from workers.yaml config file',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Config file path (default: workers.yaml)' }
+      },
+      required: []
+    }
+  },
+  // ── RVF Vector Store Tools ────────────────────────────────────────────────
+  {
+    name: 'rvf_create',
+    description: 'Create a new RVF vector store (.rvf file) with specified dimensions and distance metric',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path for the new .rvf store' },
+        dimension: { type: 'number', description: 'Vector dimensionality (e.g. 128, 384, 768, 1536)' },
+        metric: { type: 'string', description: 'Distance metric: cosine, l2, or dotproduct', default: 'cosine' }
+      },
+      required: ['path', 'dimension']
+    }
+  },
+  {
+    name: 'rvf_open',
+    description: 'Open an existing RVF store for read-write operations',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to existing .rvf file' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'rvf_ingest',
+    description: 'Insert vectors into an RVF store',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to .rvf store' },
+        entries: { type: 'array', description: 'Array of {id, vector, metadata?} objects', items: { type: 'object' } }
+      },
+      required: ['path', 'entries']
+    }
+  },
+  {
+    name: 'rvf_query',
+    description: 'Query nearest neighbors in an RVF store',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to .rvf store' },
+        vector: { type: 'array', description: 'Query vector as array of numbers', items: { type: 'number' } },
+        k: { type: 'number', description: 'Number of results to return', default: 10 }
+      },
+      required: ['path', 'vector']
+    }
+  },
+  {
+    name: 'rvf_delete',
+    description: 'Delete vectors by ID from an RVF store',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to .rvf store' },
+        ids: { type: 'array', description: 'Vector IDs to delete', items: { type: 'number' } }
+      },
+      required: ['path', 'ids']
+    }
+  },
+  {
+    name: 'rvf_status',
+    description: 'Get status of an RVF store (vector count, dimension, metric, file size)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to .rvf store' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'rvf_compact',
+    description: 'Compact an RVF store to reclaim space from deleted vectors',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to .rvf store' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'rvf_derive',
+    description: 'Derive a child RVF store from a parent using copy-on-write branching',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        parent_path: { type: 'string', description: 'Path to parent .rvf store' },
+        child_path: { type: 'string', description: 'Path for the new child .rvf store' }
+      },
+      required: ['parent_path', 'child_path']
+    }
+  },
+  {
+    name: 'rvf_segments',
+    description: 'List all segments in an RVF file (VEC, INDEX, KERNEL, EBPF, WITNESS, etc.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to .rvf store' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'rvf_examples',
+    description: 'List available example .rvf files with download URLs. Supports filtering by name, description, or category.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filter: { type: 'string', description: 'Filter examples by name or description substring' },
+        category: { type: 'string', description: 'Filter by category (core, ai, security, compute, lineage, industry, network, integration)' }
+      },
+      required: []
+    }
+  },
+  // ── rvlite Query Tools ──────────────────────────────────────────────────
+  {
+    name: 'rvlite_sql',
+    description: 'Execute SQL query over rvlite vector database with optional RVF backend',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'SQL query string (supports distance() and vec_search() functions)' },
+        db_path: { type: 'string', description: 'Path to database file (optional)' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'rvlite_cypher',
+    description: 'Execute Cypher graph query over rvlite property graph',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Cypher query string' },
+        db_path: { type: 'string', description: 'Path to database file (optional)' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'rvlite_sparql',
+    description: 'Execute SPARQL query over rvlite RDF triple store',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'SPARQL query string' },
+        db_path: { type: 'string', description: 'Path to database file (optional)' }
+      },
+      required: ['query']
+    }
+  },
+  // ── Brain Tools (11) ── Shared intelligence via @ruvector/pi-brain ──
+  {
+    name: 'brain_search',
+    description: 'Semantic search across shared brain knowledge',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        category: { type: 'string', description: 'Filter by category (pattern, solution, architecture, convention, security, performance, tooling)' },
+        limit: { type: 'number', description: 'Max results (default 10)' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'brain_share',
+    description: 'Share a learning or pattern with the collective brain',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Title of the knowledge entry' },
+        content: { type: 'string', description: 'Content/description of the knowledge' },
+        category: { type: 'string', description: 'Category (pattern, solution, architecture, convention, security, performance, tooling)' },
+        tags: { type: 'string', description: 'Comma-separated tags' },
+        code_snippet: { type: 'string', description: 'Optional code snippet' }
+      },
+      required: ['title', 'content', 'category']
+    }
+  },
+  {
+    name: 'brain_get',
+    description: 'Retrieve a specific memory by ID with full provenance',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Memory ID' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'brain_vote',
+    description: 'Quality-gate a memory with an up or down vote',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Memory ID' },
+        direction: { type: 'string', description: 'Vote direction: up or down' }
+      },
+      required: ['id', 'direction']
+    }
+  },
+  {
+    name: 'brain_list',
+    description: 'List recent shared memories filtered by category or quality',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: 'Filter by category' },
+        limit: { type: 'number', description: 'Max results (default 20)' },
+        offset: { type: 'number', description: 'Skip first N results for pagination (default 0)' },
+        sort: { type: 'string', description: 'Sort by: updated_at, quality, votes (default updated_at)' },
+        tags: { type: 'string', description: 'Filter by tags (comma-separated)' }
+      }
+    }
+  },
+  {
+    name: 'brain_delete',
+    description: 'Delete your own contribution from the shared brain',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Memory ID to delete' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'brain_status',
+    description: 'Get shared brain system health: counts, drift, quality, graph topology',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'brain_drift',
+    description: 'Check if shared knowledge has drifted from local state',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        domain: { type: 'string', description: 'Domain to check drift for' }
+      }
+    }
+  },
+  {
+    name: 'brain_partition',
+    description: 'Get knowledge partitioned by mincut topology into clusters',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        domain: { type: 'string', description: 'Domain to partition' },
+        min_cluster_size: { type: 'number', description: 'Minimum cluster size (default 3)' }
+      }
+    }
+  },
+  {
+    name: 'brain_transfer',
+    description: 'Apply learned priors from one knowledge domain to another',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_domain: { type: 'string', description: 'Source domain to transfer from' },
+        target_domain: { type: 'string', description: 'Target domain to transfer to' }
+      },
+      required: ['source_domain', 'target_domain']
+    }
+  },
+  {
+    name: 'brain_sync',
+    description: 'Synchronize LoRA weights between local and shared brain',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        direction: { type: 'string', description: 'Sync direction: pull, push, or both (default both)' }
+      }
+    }
+  },
+  {
+    name: 'brain_train',
+    description: 'Trigger a training cycle — runs SONA pattern learning and domain evolution on accumulated data',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  // ── Brain AGI Tools (6) ── AGI subsystem diagnostics via direct fetch ──
+  {
+    name: 'brain_agi_status',
+    description: 'Combined AGI subsystem diagnostics — SONA, GWT, temporal, meta-learning, midstream',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'brain_sona_stats',
+    description: 'SONA learning engine stats — patterns, trajectories, background ticks',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'brain_temporal',
+    description: 'Temporal delta tracking — velocity, trend, total deltas',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'brain_explore',
+    description: 'Meta-learning exploration — curiosity, regret, plateau status, Pareto frontier',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'brain_midstream',
+    description: 'Midstream platform diagnostics — scheduler, attractor, solver, strange-loop',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'brain_flags',
+    description: 'Show backend feature flag state (RVF, AGI, midstream flags)',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  // ── Brainpedia Page Tools (5) ── Knowledge page management ──
+  {
+    name: 'brain_page_list',
+    description: 'List Brainpedia knowledge pages with pagination and status filter',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max pages to return (default 20)' },
+        offset: { type: 'number', description: 'Skip first N pages for pagination (default 0)' },
+        status: { type: 'string', description: 'Filter by status: draft, canonical, contested, archived' }
+      }
+    }
+  },
+  {
+    name: 'brain_page_get',
+    description: 'Get a Brainpedia page by ID with delta log and evidence links',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Page ID (UUID or slug)' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'brain_page_create',
+    description: 'Create a new Brainpedia knowledge page (requires reputation >= 0.5)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Page title' },
+        content: { type: 'string', description: 'Page content body' },
+        category: { type: 'string', description: 'Category (pattern, solution, architecture, convention, security, performance, tooling)' },
+        tags: { type: 'string', description: 'Comma-separated tags' },
+        code_snippet: { type: 'string', description: 'Optional code snippet' }
+      },
+      required: ['title', 'content', 'category']
+    }
+  },
+  {
+    name: 'brain_page_update',
+    description: 'Submit a delta (correction, extension, evidence) to a Brainpedia page',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        page_id: { type: 'string', description: 'Page ID to update' },
+        delta_type: { type: 'string', description: 'Delta type: correction, extension, evidence, deprecation' },
+        content_diff: { type: 'string', description: 'Content diff or new content' },
+        evidence_links: { type: 'string', description: 'JSON array of evidence links' }
+      },
+      required: ['page_id', 'content_diff']
+    }
+  },
+  {
+    name: 'brain_page_delete',
+    description: 'Delete a Brainpedia page by ID',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Page ID to delete' }
+      },
+      required: ['id']
+    }
+  },
+  // ── WASM Node Tools (4) ── Executable compute node management ──
+  {
+    name: 'brain_node_list',
+    description: 'List published WASM compute nodes',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max nodes to return (default 20)' }
+      }
+    }
+  },
+  {
+    name: 'brain_node_get',
+    description: 'Get WASM compute node metadata and conformance vectors',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Node ID' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'brain_node_publish',
+    description: 'Publish a WASM compute node to the shared brain network',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Node name' },
+        wasm_base64: { type: 'string', description: 'Base64-encoded WASM binary' },
+        description: { type: 'string', description: 'Node description' },
+        conformance_vectors: { type: 'string', description: 'JSON array of conformance test vectors' }
+      },
+      required: ['name', 'wasm_base64']
+    }
+  },
+  {
+    name: 'brain_node_revoke',
+    description: 'Revoke a published WASM compute node',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Node ID to revoke' }
+      },
+      required: ['id']
+    }
+  },
+  // ── Midstream Tools (6) ── Real-time streaming analysis platform ──
+  {
+    name: 'midstream_status',
+    description: 'Full midstream platform diagnostics — scheduler, attractor, solver, strange-loop',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'midstream_attractor',
+    description: 'Attractor categories with Lyapunov exponent analysis',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: 'Optional category to filter (e.g., pattern, solution)' }
+      }
+    }
+  },
+  {
+    name: 'midstream_scheduler',
+    description: 'Nanosecond scheduler performance metrics — ticks, tasks/sec',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'midstream_benchmark',
+    description: 'Run sequential + concurrent latency benchmark against brain backend',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        concurrent_count: { type: 'number', description: 'Number of concurrent search requests (default 20, max 100)' }
+      }
+    }
+  },
+  {
+    name: 'midstream_search',
+    description: 'Semantic search with midstream scoring metadata in response',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        limit: { type: 'number', description: 'Max results (default 10)' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'midstream_health',
+    description: 'Combined health + midstream subsystem check',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  // ── Edge Tools (4) ── Distributed compute via @ruvector/edge-net ──
+  {
+    name: 'edge_status',
+    description: 'Get edge compute network status (genesis, relay, nodes, rUv supply)',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'edge_join',
+    description: 'Join the edge compute network as a compute node',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contribution: { type: 'number', description: 'Contribution level 0.0-1.0 (default 0.3)' }
+      }
+    }
+  },
+  {
+    name: 'edge_balance',
+    description: 'Check rUv credit balance for current identity',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'edge_tasks',
+    description: 'List available distributed compute tasks on the edge network',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max tasks to return (default 20)' }
+      }
+    }
+  },
+  // ── Identity Tools (2) ── Pi key management ──
+  {
+    name: 'identity_generate',
+    description: 'Generate a new pi key and derive pseudonym',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'identity_show',
+    description: 'Show current pi key pseudonym and derived identities',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  }
+];
+
+// List tools handler
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return { tools: TOOLS };
+});
+
+// Call tool handler
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  try {
+    switch (name) {
+      case 'hooks_stats': {
+        const stats = intel.stats();
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              stats,
+              intel_path: intel.intelPath
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_route': {
+        const result = await intel.route(args.task, args.file);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              task: args.task,
+              file: args.file,
+              ...result
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_remember': {
+        const result = await intel.remember(args.content, args.type || 'general');
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              ...result
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_recall': {
+        const results = await intel.recall(args.query, args.top_k || 5);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              query: args.query,
+              results: results.map(r => ({
+                content: r.content,
+                type: r.type,
+                score: typeof r.score === 'number' ? r.score.toFixed(3) : r.score,
+                created: r.created,
+                engineResult: r.engineResult || false
+              }))
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_init': {
+        let cmd = 'npx ruvector hooks init';
+        if (args.force) cmd += ' --force';
+        if (args.pretrain) cmd += ' --pretrain';
+        if (args.build_agents) cmd += ` --build-agents ${sanitizeShellArg(args.build_agents)}`;
+
+        try {
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 60000 });
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: true, output }, null, 2)
+            }]
+          };
+        } catch (e) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: e.message }, null, 2)
+            }]
+          };
+        }
+      }
+
+      case 'hooks_pretrain': {
+        let cmd = 'npx ruvector hooks pretrain';
+        if (args.depth) cmd += ` --depth ${sanitizeNumericArg(args.depth, 3)}`;
+        if (args.skip_git) cmd += ' --skip-git';
+        if (args.verbose) cmd += ' --verbose';
+
+        try {
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 120000 });
+          // Reload intelligence after pretrain
+          intel.data = intel.load();
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                output,
+                new_stats: intel.stats()
+              }, null, 2)
+            }]
+          };
+        } catch (e) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: e.message }, null, 2)
+            }]
+          };
+        }
+      }
+
+      case 'hooks_build_agents': {
+        let cmd = 'npx ruvector hooks build-agents';
+        if (args.focus) cmd += ` --focus ${sanitizeShellArg(args.focus)}`;
+        if (args.include_prompts) cmd += ' --include-prompts';
+
+        try {
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 30000 });
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: true, output }, null, 2)
+            }]
+          };
+        } catch (e) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: e.message }, null, 2)
+            }]
+          };
+        }
+      }
+
+      case 'hooks_verify': {
+        try {
+          const output = execSync('npx ruvector hooks verify', { encoding: 'utf-8', timeout: 15000 });
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: true, output }, null, 2)
+            }]
+          };
+        } catch (e) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: e.message, output: e.stdout }, null, 2)
+            }]
+          };
+        }
+      }
+
+      case 'hooks_doctor': {
+        let cmd = 'npx ruvector hooks doctor';
+        if (args.fix) cmd += ' --fix';
+
+        try {
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 15000 });
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: true, output }, null, 2)
+            }]
+          };
+        } catch (e) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: e.message }, null, 2)
+            }]
+          };
+        }
+      }
+
+      case 'hooks_export': {
+        const exportData = {
+          version: '2.0',
+          exported_at: new Date().toISOString(),
+          patterns: intel.data.patterns || {},
+          memories: args.include_all ? (intel.data.memories || []) : [],
+          trajectories: args.include_all ? (intel.data.trajectories || []) : [],
+          errors: intel.data.errors || {},
+          stats: intel.stats(),
+          capabilities: intel.getCapabilities()
+        };
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, data: exportData }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_capabilities': {
+        const capabilities = intel.getCapabilities();
+        const stats = intel.stats();
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              capabilities,
+              features: {
+                vectorDb: capabilities.vectorDb ? 'HNSW indexing (150x faster search)' : 'Brute-force fallback',
+                sona: capabilities.sona ? 'Micro-LoRA + Base-LoRA + EWC++' : 'Q-learning fallback',
+                attention: capabilities.attention ? 'Self-attention embeddings' : 'Hash embeddings',
+                embeddingDim: capabilities.embeddingDim,
+              },
+              stats: {
+                totalMemories: stats.totalMemories || stats.total_memories,
+                trajectoriesRecorded: stats.trajectoriesRecorded || 0,
+                patternsLearned: stats.patternsLearned || stats.total_patterns,
+                microLoraUpdates: stats.microLoraUpdates || 0,
+                ewcConsolidations: stats.ewcConsolidations || 0,
+              }
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_import': {
+        try {
+          const data = args.data;
+          const merge = args.merge !== false;
+
+          // Validate imported data structure to prevent prototype pollution and injection
+          if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+            throw new Error('Import data must be a non-null object');
+          }
+          const allowedKeys = ['patterns', 'memories', 'errors', 'agents', 'edges', 'trajectories'];
+          for (const key of Object.keys(data)) {
+            if (!allowedKeys.includes(key)) {
+              throw new Error(`Unknown import key: '${key}'. Allowed: ${allowedKeys.join(', ')}`);
+            }
+          }
+          // Prevent prototype pollution via __proto__, constructor, prototype keys
+          const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+          function checkForProtoPollution(obj, path) {
+            if (typeof obj !== 'object' || obj === null) return;
+            for (const key of Object.keys(obj)) {
+              if (dangerousKeys.includes(key)) {
+                throw new Error(`Dangerous key '${key}' detected at ${path}.${key}`);
+              }
+            }
+          }
+          if (data.patterns) checkForProtoPollution(data.patterns, 'patterns');
+          if (data.errors) checkForProtoPollution(data.errors, 'errors');
+
+          if (data.patterns && typeof data.patterns === 'object') {
+            if (merge) {
+              Object.assign(intel.data.patterns, data.patterns);
+            } else {
+              intel.data.patterns = data.patterns;
+            }
+          }
+          if (data.memories && Array.isArray(data.memories)) {
+            if (merge) {
+              intel.data.memories = [...(intel.data.memories || []), ...data.memories];
+            } else {
+              intel.data.memories = data.memories;
+            }
+          }
+          if (data.errors && typeof data.errors === 'object') {
+            if (merge) {
+              Object.assign(intel.data.errors, data.errors);
+            } else {
+              intel.data.errors = data.errors;
+            }
+          }
+          intel.save();
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: `Imported ${Object.keys(data.patterns || {}).length} patterns, ${(data.memories || []).length} memories`,
+                merge
+              }, null, 2)
+            }]
+          };
+        } catch (e) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: e.message }, null, 2)
+            }]
+          };
+        }
+      }
+
+      case 'hooks_swarm_recommend': {
+        const taskType = args.task_type || '';
+        const file = args.file || '';
+
+        // Map task types to recommended agents
+        const taskAgentMap = {
+          research: ['researcher', 'analyst', 'explorer'],
+          code: ['coder', 'backend-dev', 'sparc-coder'],
+          test: ['tester', 'tdd-london-swarm', 'production-validator'],
+          review: ['reviewer', 'code-analyzer', 'analyst'],
+          debug: ['coder', 'tester', 'analyst'],
+          refactor: ['code-analyzer', 'reviewer', 'architect'],
+          document: ['documenter', 'api-docs', 'researcher'],
+          security: ['security-manager', 'reviewer', 'code-analyzer'],
+          performance: ['perf-analyzer', 'performance-benchmarker', 'optimizer'],
+          architecture: ['system-architect', 'architect', 'planner']
+        };
+
+        // Get learned route if file provided
+        let learnedAgent = null;
+        if (file) {
+          const route = await intel.route({ task: taskType, file });
+          learnedAgent = route?.agent;
+        }
+
+        const recommendations = taskAgentMap[taskType.toLowerCase()] || ['coder', 'researcher', 'analyst'];
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              task_type: taskType,
+              recommendations,
+              learned_agent: learnedAgent,
+              suggested: learnedAgent || recommendations[0]
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_suggest_context': {
+        const query = args.query || '';
+        const topK = args.top_k || 5;
+
+        // Get relevant memories
+        const memories = await intel.recall(query, topK);
+
+        // Get recent patterns
+        const recentPatterns = Object.entries(intel.data.patterns || {})
+          .slice(0, topK)
+          .map(([state, actions]) => ({ state, topAction: Object.keys(actions)[0] }));
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              query,
+              memories: memories.map(m => ({ content: m.content, type: m.type, score: m.score })),
+              patterns: recentPatterns
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_trajectory_begin': {
+        const context = args.context;
+        const agent = args.agent || 'unknown';
+
+        // Store trajectory start in intel
+        if (!intel.data.activeTrajectories) intel.data.activeTrajectories = {};
+        const trajId = `traj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        intel.data.activeTrajectories[trajId] = {
+          id: trajId,
+          context,
+          agent,
+          steps: [],
+          startTime: Date.now()
+        };
+
+        // Also use engine if available
+        if (intel.engine) {
+          try {
+            intel.engine.beginTrajectory(context);
+          } catch (e) { /* fallback to manual */ }
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, trajectory_id: trajId, context, agent }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_trajectory_step': {
+        const action = args.action;
+        const result = args.result || '';
+        const reward = args.reward || 0.5;
+
+        // Add to most recent trajectory
+        const trajectories = intel.data.activeTrajectories || {};
+        const trajIds = Object.keys(trajectories);
+        if (trajIds.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: 'No active trajectory. Call hooks_trajectory_begin first.' }, null, 2)
+            }]
+          };
+        }
+
+        const latestTrajId = trajIds[trajIds.length - 1];
+        trajectories[latestTrajId].steps.push({ action, result, reward, time: Date.now() });
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, trajectory_id: latestTrajId, step: trajectories[latestTrajId].steps.length }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_trajectory_end': {
+        const success = args.success !== false;
+        const quality = args.quality || (success ? 0.8 : 0.2);
+
+        const trajectories = intel.data.activeTrajectories || {};
+        const trajIds = Object.keys(trajectories);
+        if (trajIds.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: false, error: 'No active trajectory.' }, null, 2)
+            }]
+          };
+        }
+
+        const latestTrajId = trajIds[trajIds.length - 1];
+        const traj = trajectories[latestTrajId];
+        traj.endTime = Date.now();
+        traj.quality = quality;
+        traj.success = success;
+
+        // Move to completed trajectories
+        if (!intel.data.trajectories) intel.data.trajectories = [];
+        intel.data.trajectories.push(traj);
+        delete trajectories[latestTrajId];
+
+        // Learn from trajectory
+        if (intel.engine && traj.steps.length > 0) {
+          try {
+            intel.engine.endTrajectory(latestTrajId, quality);
+          } catch (e) { /* fallback */ }
+        }
+
+        intel.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              trajectory_id: latestTrajId,
+              steps: traj.steps.length,
+              duration_ms: traj.endTime - traj.startTime,
+              quality
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_coedit_record': {
+        const primaryFile = args.primary_file;
+        const relatedFiles = args.related_files || [];
+
+        if (!intel.data.coEditPatterns) intel.data.coEditPatterns = {};
+        if (!intel.data.coEditPatterns[primaryFile]) intel.data.coEditPatterns[primaryFile] = {};
+
+        for (const related of relatedFiles) {
+          intel.data.coEditPatterns[primaryFile][related] = (intel.data.coEditPatterns[primaryFile][related] || 0) + 1;
+        }
+
+        // Use engine if available
+        if (intel.engine) {
+          try {
+            for (const related of relatedFiles) {
+              intel.engine.recordCoEdit(primaryFile, related);
+            }
+          } catch (e) { /* fallback */ }
+        }
+
+        intel.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, primary_file: primaryFile, related_count: relatedFiles.length }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_coedit_suggest': {
+        const file = args.file;
+        const topK = args.top_k || 5;
+
+        let suggestions = [];
+
+        // Try engine first
+        if (intel.engine) {
+          try {
+            suggestions = intel.engine.getLikelyNextFiles(file, topK);
+          } catch (e) { /* fallback */ }
+        }
+
+        // Fallback to data
+        if (suggestions.length === 0 && intel.data.coEditPatterns && intel.data.coEditPatterns[file]) {
+          suggestions = Object.entries(intel.data.coEditPatterns[file])
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, topK)
+            .map(([f, count]) => ({ file: f, count, confidence: count / 10 }));
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, file, suggestions }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_error_record': {
+        const error = args.error;
+        const fix = args.fix;
+        const file = args.file || '';
+
+        if (!intel.data.errors) intel.data.errors = {};
+        if (!intel.data.errors[error]) intel.data.errors[error] = [];
+        intel.data.errors[error].push({ fix, file, recorded: Date.now() });
+
+        // Use engine if available
+        if (intel.engine) {
+          try {
+            intel.engine.recordErrorFix(error, fix);
+          } catch (e) { /* fallback */ }
+        }
+
+        intel.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, error: error.substring(0, 50), fixes_recorded: intel.data.errors[error].length }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_error_suggest': {
+        const error = args.error;
+
+        let suggestions = [];
+
+        // Try engine first
+        if (intel.engine) {
+          try {
+            suggestions = intel.engine.getSuggestedFixes(error);
+          } catch (e) { /* fallback */ }
+        }
+
+        // Fallback to data
+        if (suggestions.length === 0 && intel.data.errors) {
+          // Find similar errors
+          for (const [errKey, fixes] of Object.entries(intel.data.errors)) {
+            if (error.includes(errKey) || errKey.includes(error)) {
+              suggestions.push(...fixes.map(f => f.fix));
+            }
+          }
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, error: error.substring(0, 50), suggestions: [...new Set(suggestions)].slice(0, 5) }, null, 2)
+          }]
+        };
+      }
+
+      case 'hooks_force_learn': {
+        let result = 'Learning triggered';
+
+        if (intel.engine) {
+          try {
+            // Run forceLearn on engine
+            const learnResult = intel.engine.forceLearn();
+            result = learnResult || 'Engine learning complete';
+
+            // Also tick for regular updates
+            intel.engine.tick();
+          } catch (e) {
+            result = `Learning: ${e.message}`;
+          }
+        }
+
+        // Save any updates
+        intel.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: true, result, stats: intel.stats() }, null, 2)
+          }]
+        };
+      }
+
+      // ============================================
+      // NEW CAPABILITY TOOL HANDLERS
+      // ============================================
+
+      case 'hooks_ast_analyze': {
+        try {
+          const safeFile = sanitizeShellArg(args.file);
+          const output = execSync(`npx ruvector hooks ast-analyze "${safeFile}" --json`, { encoding: 'utf-8', timeout: 30000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_ast_complexity': {
+        try {
+          const filesArg = args.files.map(f => `"${sanitizeShellArg(f)}"`).join(' ');
+          const threshold = parseInt(args.threshold, 10) || 10;
+          const output = execSync(`npx ruvector hooks ast-complexity ${filesArg} --threshold ${threshold}`, { encoding: 'utf-8', timeout: 60000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_diff_analyze': {
+        try {
+          const cmd = args.commit ? `npx ruvector hooks diff-analyze "${sanitizeShellArg(args.commit)}" --json` : 'npx ruvector hooks diff-analyze --json';
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 60000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_diff_classify': {
+        try {
+          const cmd = args.commit ? `npx ruvector hooks diff-classify "${sanitizeShellArg(args.commit)}"` : 'npx ruvector hooks diff-classify';
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 30000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_diff_similar': {
+        try {
+          const topK = parseInt(args.top_k, 10) || 5;
+          const commits = parseInt(args.commits, 10) || 50;
+          const output = execSync(`npx ruvector hooks diff-similar -k ${topK} --commits ${commits}`, { encoding: 'utf-8', timeout: 120000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_coverage_route': {
+        try {
+          const safeFile = sanitizeShellArg(args.file);
+          const output = execSync(`npx ruvector hooks coverage-route "${safeFile}"`, { encoding: 'utf-8', timeout: 15000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_coverage_suggest': {
+        try {
+          const filesArg = args.files.map(f => `"${sanitizeShellArg(f)}"`).join(' ');
+          const output = execSync(`npx ruvector hooks coverage-suggest ${filesArg}`, { encoding: 'utf-8', timeout: 30000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_graph_mincut': {
+        try {
+          const filesArg = args.files.map(f => `"${sanitizeShellArg(f)}"`).join(' ');
+          const output = execSync(`npx ruvector hooks graph-mincut ${filesArg}`, { encoding: 'utf-8', timeout: 60000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_graph_cluster': {
+        try {
+          const filesArg = args.files.map(f => `"${sanitizeShellArg(f)}"`).join(' ');
+          const method = sanitizeShellArg(args.method || 'louvain');
+          const clusters = parseInt(args.clusters, 10) || 3;
+          const output = execSync(`npx ruvector hooks graph-cluster ${filesArg} --method ${method} --clusters ${clusters}`, { encoding: 'utf-8', timeout: 60000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_security_scan': {
+        try {
+          const filesArg = args.files.map(f => `"${sanitizeShellArg(f)}"`).join(' ');
+          const output = execSync(`npx ruvector hooks security-scan ${filesArg}`, { encoding: 'utf-8', timeout: 120000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_rag_context': {
+        try {
+          const safeQuery = sanitizeShellArg(args.query);
+          const topK = parseInt(args.top_k, 10) || 5;
+          let cmd = `npx ruvector hooks rag-context "${safeQuery}" -k ${topK}`;
+          if (args.rerank) cmd += ' --rerank';
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 30000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_git_churn': {
+        try {
+          const days = parseInt(args.days, 10) || 30;
+          const top = parseInt(args.top, 10) || 10;
+          const output = execSync(`npx ruvector hooks git-churn --days ${days} --top ${top}`, { encoding: 'utf-8', timeout: 30000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_route_enhanced': {
+        try {
+          const safeTask = sanitizeShellArg(args.task);
+          let cmd = `npx ruvector hooks route-enhanced "${safeTask}"`;
+          if (args.file) cmd += ` --file "${sanitizeShellArg(args.file)}"`;
+          const output = execSync(cmd, { encoding: 'utf-8', timeout: 30000 });
+          return { content: [{ type: 'text', text: output }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }] };
+        }
+      }
+
+      case 'hooks_attention_info': {
+        // Return info about available attention mechanisms
+        let attentionInfo = { available: false, mechanisms: [] };
+        try {
+          const attention = require('@ruvector/attention');
+          attentionInfo = {
+            available: true,
+            version: attention.version || '1.0.0',
+            mechanisms: [
+              { name: 'DotProductAttention', description: 'Basic scaled dot-product attention' },
+              { name: 'MultiHeadAttention', description: 'Multi-head self-attention with parallel heads' },
+              { name: 'FlashAttention', description: 'Memory-efficient attention with tiling' },
+              { name: 'HyperbolicAttention', description: 'Attention in Poincaré ball hyperbolic space' },
+              { name: 'LinearAttention', description: 'O(n) linear complexity attention' },
+              { name: 'MoEAttention', description: 'Mixture-of-Experts sparse attention' },
+              { name: 'GraphRoPeAttention', description: 'Rotary position embeddings for graphs' },
+              { name: 'DualSpaceAttention', description: 'Euclidean + Hyperbolic hybrid' },
+              { name: 'LocalGlobalAttention', description: 'Sliding window + global tokens' }
+            ],
+            hyperbolic: { expMap: true, logMap: true, mobiusAddition: true, poincareDistance: true }
+          };
+        } catch (e) {
+          attentionInfo = { available: false, error: 'Attention package not installed' };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...attentionInfo }, null, 2) }] };
+      }
+
+      case 'hooks_gnn_info': {
+        // Return info about GNN capabilities
+        let gnnInfo = { available: false, layers: [] };
+        try {
+          const gnn = require('@ruvector/gnn');
+          gnnInfo = {
+            available: true,
+            version: gnn.version || '1.0.0',
+            layers: [
+              { name: 'RuvectorLayer', description: 'Differentiable vector search layer' },
+              { name: 'TensorCompress', description: 'Tensor compression for embeddings' }
+            ],
+            features: [
+              'differentiableSearch - Gradient-based vector search',
+              'hierarchicalForward - Multi-scale graph processing',
+              'getCompressionLevel - Adaptive compression'
+            ]
+          };
+        } catch (e) {
+          gnnInfo = { available: false, error: 'GNN package not installed' };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...gnnInfo }, null, 2) }] };
+      }
+
+      // Learning Engine Handlers (v2.1)
+      case 'hooks_learning_config': {
+        let LearningEngine;
+        try {
+          LearningEngine = require('../dist/core/learning-engine').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LearningEngine not available' }) }] };
+        }
+
+        const engine = new LearningEngine();
+        if (intel.learning) engine.import(intel.learning);
+
+        if (args.task && args.algorithm) {
+          const config = {};
+          if (args.algorithm) config.algorithm = args.algorithm;
+          if (args.learningRate !== undefined) config.learningRate = args.learningRate;
+          if (args.discountFactor !== undefined) config.discountFactor = args.discountFactor;
+          if (args.epsilon !== undefined) config.epsilon = args.epsilon;
+          engine.configure(args.task, config);
+          intel.learning = engine.export();
+          intel.save();
+        }
+
+        const tasks = ['agent-routing', 'error-avoidance', 'confidence-scoring', 'trajectory-learning', 'context-ranking', 'memory-recall'];
+        const configs = {};
+        for (const task of tasks) {
+          configs[task] = engine.getConfig(task);
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, configs }, null, 2) }] };
+      }
+
+      case 'hooks_learning_stats': {
+        let LearningEngine;
+        try {
+          LearningEngine = require('../dist/core/learning-engine').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LearningEngine not available' }) }] };
+        }
+
+        const engine = new LearningEngine();
+        if (intel.learning) engine.import(intel.learning);
+
+        const summary = engine.getStatsSummary();
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...summary }, null, 2) }] };
+      }
+
+      case 'hooks_learning_update': {
+        let LearningEngine;
+        try {
+          LearningEngine = require('../dist/core/learning-engine').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LearningEngine not available' }) }] };
+        }
+
+        const engine = new LearningEngine();
+        if (intel.learning) engine.import(intel.learning);
+
+        const experience = {
+          state: args.state,
+          action: args.action,
+          reward: args.reward,
+          nextState: args.nextState || args.state,
+          done: args.done || false,
+          timestamp: Date.now()
+        };
+
+        const delta = engine.update(args.task, experience);
+        intel.learning = engine.export();
+        intel.save();
+
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          task: args.task,
+          experience,
+          delta,
+          algorithm: engine.getConfig(args.task).algorithm
+        }, null, 2) }] };
+      }
+
+      case 'hooks_learn': {
+        let LearningEngine;
+        try {
+          LearningEngine = require('../dist/core/learning-engine').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LearningEngine not available' }) }] };
+        }
+
+        const engine = new LearningEngine();
+        if (intel.learning) engine.import(intel.learning);
+
+        const task = args.task || 'agent-routing';
+        let result = { success: true };
+
+        if (args.action && args.reward !== undefined) {
+          const experience = {
+            state: args.state,
+            action: args.action,
+            reward: args.reward,
+            nextState: args.state,
+            done: true,
+            timestamp: Date.now()
+          };
+          const delta = engine.update(task, experience);
+          result.recorded = { experience, delta, algorithm: engine.getConfig(task).algorithm };
+        }
+
+        if (args.actions && args.actions.length > 0) {
+          const best = engine.getBestAction(task, args.state, args.actions);
+          result.recommendation = best;
+        }
+
+        intel.learning = engine.export();
+        intel.save();
+
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'hooks_algorithms_list': {
+        let LearningEngine;
+        try {
+          LearningEngine = require('../dist/core/learning-engine').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LearningEngine not available' }) }] };
+        }
+
+        const algorithms = LearningEngine.getAlgorithms();
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          algorithms: algorithms.map(a => ({
+            name: a.algorithm,
+            description: a.description,
+            bestFor: a.bestFor
+          }))
+        }, null, 2) }] };
+      }
+
+      // TensorCompress Handlers
+      case 'hooks_compress': {
+        let TensorCompress;
+        try {
+          TensorCompress = require('../dist/core/tensor-compress').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'TensorCompress not available' }) }] };
+        }
+
+        const compress = new TensorCompress({ autoCompress: false });
+        if (intel.compressedPatterns) compress.import(intel.compressedPatterns);
+
+        const stats = compress.recompressAll();
+        intel.compressedPatterns = compress.export();
+        intel.save();
+
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Compression complete', ...stats }, null, 2) }] };
+      }
+
+      case 'hooks_compress_stats': {
+        let TensorCompress;
+        try {
+          TensorCompress = require('../dist/core/tensor-compress').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'TensorCompress not available' }) }] };
+        }
+
+        const compress = new TensorCompress({ autoCompress: false });
+        if (intel.compressedPatterns) compress.import(intel.compressedPatterns);
+
+        const stats = compress.getStats();
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...stats }, null, 2) }] };
+      }
+
+      case 'hooks_compress_store': {
+        let TensorCompress;
+        try {
+          TensorCompress = require('../dist/core/tensor-compress').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'TensorCompress not available' }) }] };
+        }
+
+        const compress = new TensorCompress({ autoCompress: false });
+        if (intel.compressedPatterns) compress.import(intel.compressedPatterns);
+
+        compress.store(args.key, args.vector, args.level);
+        intel.compressedPatterns = compress.export();
+        intel.save();
+
+        const stats = compress.getStats();
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          key: args.key,
+          level: args.level || 'auto',
+          originalDim: args.vector.length,
+          totalTensors: stats.totalTensors
+        }, null, 2) }] };
+      }
+
+      case 'hooks_compress_get': {
+        let TensorCompress;
+        try {
+          TensorCompress = require('../dist/core/tensor-compress').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'TensorCompress not available' }) }] };
+        }
+
+        const compress = new TensorCompress({ autoCompress: false });
+        if (intel.compressedPatterns) compress.import(intel.compressedPatterns);
+
+        const vector = compress.get(args.key);
+        if (!vector) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'Key not found' }) }] };
+        }
+
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          key: args.key,
+          vector: Array.from(vector),
+          dimension: vector.length
+        }, null, 2) }] };
+      }
+
+      case 'hooks_batch_learn': {
+        let LearningEngine;
+        try {
+          LearningEngine = require('../dist/core/learning-engine').default;
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LearningEngine not available' }) }] };
+        }
+
+        const experiences = args.experiences || [];
+        if (!Array.isArray(experiences) || experiences.length === 0) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'experiences must be a non-empty array' }) }] };
+        }
+
+        const task = args.task || 'agent-routing';
+        const engine = new LearningEngine();
+
+        // Import existing learning data
+        if (intel.data.learning) {
+          engine.import(intel.data.learning);
+        }
+
+        const results = [];
+        let totalReward = 0;
+
+        for (const exp of experiences) {
+          const experience = {
+            state: exp.state,
+            action: exp.action,
+            reward: exp.reward ?? 0.5,
+            nextState: exp.nextState ?? exp.state,
+            done: exp.done ?? false,
+            timestamp: Date.now()
+          };
+
+          const delta = engine.update(task, experience);
+          totalReward += experience.reward;
+          results.push({ state: exp.state, action: exp.action, reward: experience.reward, delta });
+        }
+
+        // Save
+        intel.data.learning = engine.export();
+        intel.save();
+
+        const stats = engine.getStatsSummary();
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          processed: experiences.length,
+          avgReward: totalReward / experiences.length,
+          results,
+          stats: {
+            bestAlgorithm: stats.bestAlgorithm,
+            totalUpdates: stats.totalUpdates,
+            avgReward: stats.avgReward
+          }
+        }, null, 2) }] };
+      }
+
+      case 'hooks_subscribe_snapshot': {
+        const events = args.events || ['learn', 'route'];
+        const lastState = args.lastState || { patterns: 0, memories: 0, trajectories: 0, updates: 0 };
+
+        const stats = intel.data.stats || {};
+        const learning = intel.data.learning?.stats || {};
+
+        // Calculate current state
+        let totalUpdates = 0;
+        let bestAlgorithm = null;
+        let bestAvgReward = -Infinity;
+
+        Object.entries(learning).forEach(([algo, data]) => {
+          if (data.updates) {
+            totalUpdates += data.updates;
+            if (data.avgReward > bestAvgReward) {
+              bestAvgReward = data.avgReward;
+              bestAlgorithm = algo;
+            }
+          }
+        });
+
+        const currentState = {
+          patterns: stats.total_patterns || 0,
+          memories: stats.total_memories || 0,
+          trajectories: stats.total_trajectories || 0,
+          updates: totalUpdates
+        };
+
+        // Calculate deltas
+        const deltas = {
+          patterns: currentState.patterns - (lastState.patterns || 0),
+          memories: currentState.memories - (lastState.memories || 0),
+          trajectories: currentState.trajectories - (lastState.trajectories || 0),
+          updates: currentState.updates - (lastState.updates || 0)
+        };
+
+        const hasChanges = Object.values(deltas).some(d => d > 0);
+
+        // Build events array
+        const eventsList = [];
+        if (events.includes('learn') && deltas.patterns > 0) {
+          eventsList.push({ type: 'learn', subtype: 'pattern', delta: deltas.patterns, total: currentState.patterns });
+        }
+        if (events.includes('learn') && deltas.updates > 0) {
+          eventsList.push({ type: 'learn', subtype: 'algorithm', delta: deltas.updates, total: currentState.updates, bestAlgorithm });
+        }
+        if (events.includes('memory') && deltas.memories > 0) {
+          eventsList.push({ type: 'memory', delta: deltas.memories, total: currentState.memories });
+        }
+        if (events.includes('route') && deltas.trajectories > 0) {
+          eventsList.push({ type: 'route', delta: deltas.trajectories, total: currentState.trajectories });
+        }
+
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          hasChanges,
+          currentState,
+          deltas,
+          events: eventsList,
+          bestAlgorithm,
+          timestamp: Date.now()
+        }, null, 2) }] };
+      }
+
+      case 'hooks_watch_status': {
+        // Return current intelligence state as a "watch" status
+        const stats = intel.data.stats || {};
+        const patterns = Object.keys(intel.data.patterns || {});
+        const recentPatterns = patterns.slice(-5);
+
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          watching: true,
+          stats: {
+            totalPatterns: stats.total_patterns || 0,
+            totalMemories: stats.total_memories || 0,
+            totalTrajectories: stats.total_trajectories || 0,
+            sessionCount: stats.session_count || 0
+          },
+          recentPatterns,
+          lastUpdate: stats.last_session || Date.now(),
+          tip: 'Use hooks_subscribe_snapshot with lastState for delta tracking'
+        }, null, 2) }] };
+      }
+
+      // ============================================
+      // BACKGROUND WORKERS HANDLERS (via agentic-flow)
+      // ============================================
+      case 'workers_dispatch': {
+        const prompt = sanitizeShellArg(args.prompt);
+        try {
+          const result = execSync(`npx agentic-flow@alpha workers dispatch "${prompt.replace(/"/g, '\\"')}"`, {
+            encoding: 'utf-8',
+            timeout: 30000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            message: 'Worker dispatched',
+            output: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            message: 'Worker dispatch attempted',
+            note: 'Check workers status for progress'
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_status': {
+        try {
+          const cmdArgs = args.workerId ? `workers status ${sanitizeShellArg(args.workerId)}` : 'workers status';
+          const result = execSync(`npx agentic-flow@alpha ${cmdArgs}`, {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            status: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: 'Could not get worker status',
+            message: e.message
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_results': {
+        try {
+          const cmdArgs = args.json ? 'workers results --json' : 'workers results';
+          const result = execSync(`npx agentic-flow@alpha ${cmdArgs}`, {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          if (args.json) {
+            try {
+              return { content: [{ type: 'text', text: JSON.stringify({
+                success: true,
+                results: JSON.parse(result.trim())
+              }, null, 2) }] };
+            } catch {
+              return { content: [{ type: 'text', text: result.trim() }] };
+            }
+          }
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            results: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: 'Could not get worker results',
+            message: e.message
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_triggers': {
+        try {
+          const result = execSync('npx agentic-flow@alpha workers triggers', {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            triggers: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          // Return hardcoded list as fallback
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            triggers: ['ultralearn', 'optimize', 'consolidate', 'predict', 'audit', 'map', 'preload', 'deepdive', 'document', 'refactor', 'benchmark', 'testgaps']
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_stats': {
+        try {
+          const result = execSync('npx agentic-flow@alpha workers stats', {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            stats: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: 'Could not get worker stats',
+            message: e.message
+          }, null, 2) }] };
+        }
+      }
+
+      // Custom Worker System handlers (agentic-flow@alpha.39+)
+      case 'workers_presets': {
+        try {
+          const result = execSync('npx agentic-flow@alpha workers presets', {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            presets: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            presets: ['quick-scan', 'deep-analysis', 'security-scan', 'learning', 'api-docs', 'test-analysis'],
+            note: 'Hardcoded fallback - install agentic-flow@alpha for full support'
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_phases': {
+        try {
+          const result = execSync('npx agentic-flow@alpha workers phases', {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            phases: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            phases: ['file-discovery', 'static-analysis', 'security-analysis', 'pattern-extraction', 'dependency-analysis', 'complexity-analysis', 'test-coverage', 'api-extraction', 'secret-detection', 'report-generation'],
+            note: 'Partial list - install agentic-flow@alpha for all 24 phases'
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_create': {
+        const name = sanitizeShellArg(args.name);
+        const preset = sanitizeShellArg(args.preset || 'quick-scan');
+        const triggers = args.triggers ? sanitizeShellArg(args.triggers) : null;
+        if (!name) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: 'Invalid worker name'
+          }, null, 2) }] };
+        }
+        try {
+          let cmd = `npx agentic-flow@alpha workers create "${name}" --preset ${preset}`;
+          if (triggers) cmd += ` --triggers "${triggers}"`;
+          const result = execSync(cmd, {
+            encoding: 'utf-8',
+            timeout: 30000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            message: `Worker '${name}' created with preset '${preset}'`,
+            output: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: 'Worker creation failed',
+            message: e.message
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_run': {
+        const name = sanitizeShellArg(args.name);
+        const targetPath = sanitizeShellArg(args.path || '.');
+        try {
+          const result = execSync(`npx agentic-flow@alpha workers run "${name}" --path "${targetPath}"`, {
+            encoding: 'utf-8',
+            timeout: 120000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            worker: name,
+            path: targetPath,
+            output: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: `Worker '${name}' execution failed`,
+            message: e.message
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_custom': {
+        try {
+          const result = execSync('npx agentic-flow@alpha workers custom', {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            workers: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            workers: [],
+            note: 'No custom workers registered'
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_init_config': {
+        try {
+          let cmd = 'npx agentic-flow@alpha workers init-config';
+          if (args.force) cmd += ' --force';
+          const result = execSync(cmd, {
+            encoding: 'utf-8',
+            timeout: 15000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            message: 'workers.yaml config file created',
+            output: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: 'Config init failed',
+            message: e.message
+          }, null, 2) }] };
+        }
+      }
+
+      case 'workers_load_config': {
+        const configFile = sanitizeShellArg(args.file || 'workers.yaml');
+        try {
+          const result = execSync(`npx agentic-flow@alpha workers load-config --file "${configFile}"`, {
+            encoding: 'utf-8',
+            timeout: 30000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            file: configFile,
+            output: result.trim()
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: `Config load failed from '${configFile}'`,
+            message: e.message
+          }, null, 2) }] };
+        }
+      }
+
+      // ── RVF Tool Handlers ─────────────────────────────────────────────────
+      case 'rvf_create': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { createRvfStore } = require('../dist/core/rvf-wrapper.js');
+          const store = await createRvfStore(safePath, { dimension: args.dimension, metric: args.metric || 'cosine' });
+          const status = store.status ? await store.status() : { dimension: args.dimension };
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, path: safePath, ...status }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message, hint: 'Install @ruvector/rvf: npm install @ruvector/rvf' }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_open': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { openRvfStore, rvfStatus } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safePath);
+          const status = await rvfStatus(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, path: safePath, ...status }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_ingest': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { openRvfStore, rvfIngest, rvfClose } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safePath);
+          const result = await rvfIngest(store, args.entries);
+          await rvfClose(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_query': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { openRvfStore, rvfQuery, rvfClose } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safePath);
+          const results = await rvfQuery(store, args.vector, args.k || 10);
+          await rvfClose(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, results }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_delete': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { openRvfStore, rvfDelete, rvfClose } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safePath);
+          const result = await rvfDelete(store, args.ids);
+          await rvfClose(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_status': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { openRvfStore, rvfStatus, rvfClose } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safePath);
+          const status = await rvfStatus(store);
+          await rvfClose(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...status }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_compact': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { openRvfStore, rvfCompact, rvfClose } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safePath);
+          const result = await rvfCompact(store);
+          await rvfClose(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_derive': {
+        try {
+          const safeParent = validateRvfPath(args.parent_path);
+          const safeChild = validateRvfPath(args.child_path);
+          const { openRvfStore, rvfDerive, rvfClose } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safeParent);
+          await rvfDerive(store, safeChild);
+          await rvfClose(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, parent: safeParent, child: safeChild }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_segments': {
+        try {
+          const safePath = validateRvfPath(args.path);
+          const { openRvfStore, rvfClose } = require('../dist/core/rvf-wrapper.js');
+          const store = await openRvfStore(safePath);
+          const segs = await store.segments();
+          await rvfClose(store);
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, segments: segs }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvf_examples': {
+        const os = require('os');
+        const GCS_MANIFEST = 'https://storage.googleapis.com/ruvector-examples/manifest.json';
+        const GITHUB_RAW = 'https://raw.githubusercontent.com/ruvnet/ruvector/main/examples/rvf/output';
+        const cacheDir = path.join(os.homedir(), '.ruvector', 'examples');
+        const manifestPath = path.join(cacheDir, 'manifest.json');
+
+        let manifest;
+        // Try cache first
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const stat = fs.statSync(manifestPath);
+            if (Date.now() - stat.mtimeMs < 3600000) {
+              manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            }
+          } catch {}
+        }
+
+        // Fetch from GCS if no fresh cache
+        if (!manifest) {
+          try {
+            const resp = await proxyFetch(GCS_MANIFEST, { signal: AbortSignal.timeout(15000) });
+            if (resp.ok) {
+              manifest = await resp.json();
+              try {
+                fs.mkdirSync(cacheDir, { recursive: true });
+                fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+              } catch {}
+            }
+          } catch {}
+        }
+
+        // Fallback to hardcoded
+        if (!manifest) {
+          manifest = {
+            version: 'builtin',
+            base_url: GITHUB_RAW,
+            examples: [
+              { name: 'basic_store', size_human: '152 KB', description: '1,000 vectors, dim 128', category: 'core' },
+              { name: 'semantic_search', size_human: '755 KB', description: 'Semantic search with HNSW', category: 'core' },
+              { name: 'rag_pipeline', size_human: '303 KB', description: 'RAG pipeline embeddings', category: 'core' },
+              { name: 'agent_memory', size_human: '32 KB', description: 'AI agent episodic memory', category: 'ai' },
+              { name: 'swarm_knowledge', size_human: '86 KB', description: 'Multi-agent knowledge base', category: 'ai' },
+              { name: 'self_booting', size_human: '31 KB', description: 'Self-booting with kernel', category: 'compute' },
+              { name: 'ebpf_accelerator', size_human: '153 KB', description: 'eBPF distance accelerator', category: 'compute' },
+              { name: 'tee_attestation', size_human: '102 KB', description: 'TEE attestation + witnesses', category: 'security' },
+              { name: 'claude_code_appliance', size_human: '17 KB', description: 'Claude Code appliance', category: 'integration' },
+              { name: 'lineage_parent', size_human: '52 KB', description: 'COW parent file', category: 'lineage' },
+              { name: 'financial_signals', size_human: '202 KB', description: 'Financial signals', category: 'industry' },
+              { name: 'progressive_index', size_human: '2.5 MB', description: 'Large-scale HNSW index', category: 'core' },
+            ]
+          };
+        }
+
+        let examples = manifest.examples || [];
+        const baseUrl = manifest.base_url || GITHUB_RAW;
+
+        if (args.filter) {
+          const f = args.filter.toLowerCase();
+          examples = examples.filter(e =>
+            e.name.includes(f) ||
+            (e.description || '').toLowerCase().includes(f) ||
+            (e.category || '').includes(f)
+          );
+        }
+
+        if (args.category) {
+          examples = examples.filter(e => e.category === args.category);
+        }
+
+        return { content: [{ type: 'text', text: JSON.stringify({
+          success: true,
+          version: manifest.version,
+          total: (manifest.examples || []).length,
+          shown: examples.length,
+          examples: examples.map(e => ({
+            ...e,
+            url: `${baseUrl}/${e.name}.rvf`
+          })),
+          categories: manifest.categories || {},
+          catalog: 'https://github.com/ruvnet/ruvector/tree/main/examples/rvf/output'
+        }, null, 2) }] };
+      }
+
+      // ── rvlite Query Tool Handlers ──────────────────────────────────────
+      case 'rvlite_sql': {
+        try {
+          let rvlite;
+          try {
+            rvlite = require('rvlite');
+          } catch (_e) {
+            return { content: [{ type: 'text', text: JSON.stringify({
+              success: false,
+              error: 'rvlite package not installed',
+              hint: 'Install with: npm install rvlite'
+            }, null, 2) }] };
+          }
+          const safeQuery = sanitizeShellArg(args.query);
+          const dbOpts = args.db_path ? { path: validateRvfPath(args.db_path) } : {};
+          const db = new rvlite.Database(dbOpts);
+          const results = db.sql(safeQuery);
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            query_type: 'sql',
+            results,
+            row_count: Array.isArray(results) ? results.length : 0
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: e.message
+          }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvlite_cypher': {
+        try {
+          let rvlite;
+          try {
+            rvlite = require('rvlite');
+          } catch (_e) {
+            return { content: [{ type: 'text', text: JSON.stringify({
+              success: false,
+              error: 'rvlite package not installed',
+              hint: 'Install with: npm install rvlite'
+            }, null, 2) }] };
+          }
+          const safeQuery = sanitizeShellArg(args.query);
+          const dbOpts = args.db_path ? { path: validateRvfPath(args.db_path) } : {};
+          const db = new rvlite.Database(dbOpts);
+          const results = db.cypher(safeQuery);
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            query_type: 'cypher',
+            results,
+            row_count: Array.isArray(results) ? results.length : 0
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: e.message
+          }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'rvlite_sparql': {
+        try {
+          let rvlite;
+          try {
+            rvlite = require('rvlite');
+          } catch (_e) {
+            return { content: [{ type: 'text', text: JSON.stringify({
+              success: false,
+              error: 'rvlite package not installed',
+              hint: 'Install with: npm install rvlite'
+            }, null, 2) }] };
+          }
+          const safeQuery = sanitizeShellArg(args.query);
+          const dbOpts = args.db_path ? { path: validateRvfPath(args.db_path) } : {};
+          const db = new rvlite.Database(dbOpts);
+          const results = db.sparql(safeQuery);
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            query_type: 'sparql',
+            results,
+            row_count: Array.isArray(results) ? results.length : 0
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: false,
+            error: e.message
+          }, null, 2) }], isError: true };
+        }
+      }
+
+      // ── Brain Tool Handlers (direct fetch to pi.ruv.io) ─────────────────
+      case 'brain_search':
+      case 'brain_share':
+      case 'brain_get':
+      case 'brain_vote':
+      case 'brain_list':
+      case 'brain_delete':
+      case 'brain_status':
+      case 'brain_drift':
+      case 'brain_partition':
+      case 'brain_transfer':
+      case 'brain_sync':
+      case 'brain_train': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+          const subCmd = name.replace('brain_', '');
+          let url, fetchOpts = { headers: hdrs, signal: AbortSignal.timeout(30000) };
+          switch (subCmd) {
+            case 'search': {
+              const p = new URLSearchParams({ q: args.query || '' });
+              if (args.category) p.set('category', args.category);
+              if (args.limit) p.set('limit', String(args.limit));
+              url = `${brainUrl}/v1/memories/search?${p}`;
+              break;
+            }
+            case 'share': {
+              url = `${brainUrl}/v1/memories`;
+              fetchOpts.method = 'POST';
+              fetchOpts.body = JSON.stringify({ title: args.title, content: args.content, category: args.category, tags: args.tags ? args.tags.split(',').map(t => t.trim()) : [], code_snippet: args.code_snippet });
+              break;
+            }
+            case 'get': url = `${brainUrl}/v1/memories/${args.id}`; break;
+            case 'vote': {
+              url = `${brainUrl}/v1/memories/${args.id}/vote`;
+              fetchOpts.method = 'POST';
+              fetchOpts.body = JSON.stringify({ direction: args.direction });
+              break;
+            }
+            case 'list': {
+              const p = new URLSearchParams();
+              if (args.category) p.set('category', args.category);
+              p.set('limit', String(args.limit || 20));
+              if (args.offset) p.set('offset', String(args.offset));
+              if (args.sort) p.set('sort', args.sort);
+              if (args.tags) p.set('tags', args.tags);
+              url = `${brainUrl}/v1/memories/list?${p}`;
+              break;
+            }
+            case 'delete': {
+              url = `${brainUrl}/v1/memories/${args.id}`;
+              fetchOpts.method = 'DELETE';
+              break;
+            }
+            case 'status': url = `${brainUrl}/v1/status`; break;
+            case 'drift': {
+              const p = new URLSearchParams();
+              if (args.domain) p.set('domain', args.domain);
+              url = `${brainUrl}/v1/drift?${p}`;
+              break;
+            }
+            case 'partition': {
+              const p = new URLSearchParams();
+              if (args.domain) p.set('domain', args.domain);
+              if (args.min_cluster_size) p.set('min_cluster_size', String(args.min_cluster_size));
+              url = `${brainUrl}/v1/partition?${p}`;
+              break;
+            }
+            case 'transfer': {
+              url = `${brainUrl}/v1/transfer`;
+              fetchOpts.method = 'POST';
+              fetchOpts.body = JSON.stringify({ source_domain: args.source_domain, target_domain: args.target_domain });
+              break;
+            }
+            case 'sync': {
+              const p = new URLSearchParams();
+              if (args.direction) p.set('direction', args.direction);
+              url = `${brainUrl}/v1/lora/latest${p.toString() ? '?' + p : ''}`;
+              break;
+            }
+            case 'train': {
+              url = `${brainUrl}/v1/train`;
+              fetchOpts.method = 'POST';
+              fetchOpts.body = JSON.stringify({});
+              break;
+            }
+          }
+          const resp = await proxyFetch(url, fetchOpts);
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => resp.statusText);
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: `${resp.status} ${errText}` }, null, 2) }], isError: true };
+          }
+          const result = (resp.status === 204 || resp.headers.get('content-length') === '0') ? {} : await resp.json();
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      // ── Brainpedia Page Tool Handlers ────────────────────────────────────
+      case 'brain_page_list':
+      case 'brain_page_get':
+      case 'brain_page_create':
+      case 'brain_page_update':
+      case 'brain_page_delete': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+          let url, fetchOpts = { headers: hdrs, signal: AbortSignal.timeout(30000) };
+          const subCmd = name.replace('brain_page_', '');
+          switch (subCmd) {
+            case 'list': {
+              const p = new URLSearchParams();
+              if (args.limit) p.set('limit', String(args.limit));
+              if (args.offset) p.set('offset', String(args.offset));
+              if (args.status) p.set('status', args.status);
+              url = `${brainUrl}/v1/pages${p.toString() ? '?' + p : ''}`;
+              break;
+            }
+            case 'get': url = `${brainUrl}/v1/pages/${args.id}`; break;
+            case 'create': {
+              url = `${brainUrl}/v1/pages`;
+              fetchOpts.method = 'POST';
+              fetchOpts.body = JSON.stringify({ title: args.title, content: args.content, category: args.category, tags: args.tags ? args.tags.split(',').map(t => t.trim()) : [], code_snippet: args.code_snippet, evidence_links: [], embedding: [], witness_hash: '' });
+              break;
+            }
+            case 'update': {
+              url = `${brainUrl}/v1/pages/${args.page_id}/deltas`;
+              fetchOpts.method = 'POST';
+              let evidence = [];
+              try { if (args.evidence_links) evidence = JSON.parse(args.evidence_links); } catch {}
+              fetchOpts.body = JSON.stringify({ delta_type: args.delta_type || 'extension', content_diff: args.content_diff, evidence_links: evidence, witness_hash: '' });
+              break;
+            }
+            case 'delete': {
+              url = `${brainUrl}/v1/pages/${args.id}`;
+              fetchOpts.method = 'DELETE';
+              break;
+            }
+          }
+          const resp = await proxyFetch(url, fetchOpts);
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => resp.statusText);
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: `${resp.status} ${errText}` }, null, 2) }], isError: true };
+          }
+          const result = (resp.status === 204 || resp.headers.get('content-length') === '0') ? {} : await resp.json();
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      // ── WASM Node Tool Handlers ────────────────────────────────────────────
+      case 'brain_node_list':
+      case 'brain_node_get':
+      case 'brain_node_publish':
+      case 'brain_node_revoke': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+          let url, fetchOpts = { headers: hdrs, signal: AbortSignal.timeout(30000) };
+          const subCmd = name.replace('brain_node_', '');
+          switch (subCmd) {
+            case 'list': {
+              const p = new URLSearchParams();
+              if (args.limit) p.set('limit', String(args.limit));
+              url = `${brainUrl}/v1/nodes${p.toString() ? '?' + p : ''}`;
+              break;
+            }
+            case 'get': url = `${brainUrl}/v1/nodes/${args.id}`; break;
+            case 'publish': {
+              url = `${brainUrl}/v1/nodes`;
+              fetchOpts.method = 'POST';
+              let vectors = [];
+              try { if (args.conformance_vectors) vectors = JSON.parse(args.conformance_vectors); } catch {}
+              fetchOpts.body = JSON.stringify({ name: args.name, wasm_base64: args.wasm_base64, description: args.description || '', conformance_vectors: vectors });
+              break;
+            }
+            case 'revoke': {
+              url = `${brainUrl}/v1/nodes/${args.id}/revoke`;
+              fetchOpts.method = 'POST';
+              fetchOpts.body = JSON.stringify({});
+              break;
+            }
+          }
+          const resp = await proxyFetch(url, fetchOpts);
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => resp.statusText);
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: `${resp.status} ${errText}` }, null, 2) }], isError: true };
+          }
+          const result = (resp.status === 204 || resp.headers.get('content-length') === '0') ? {} : await resp.json();
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...(Array.isArray(result) ? { items: result, count: result.length } : result) }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      // ── Brain AGI Tool Handlers ────────────────────────────────────────────
+      case 'brain_agi_status':
+      case 'brain_sona_stats':
+      case 'brain_temporal':
+      case 'brain_explore':
+      case 'brain_midstream':
+      case 'brain_flags': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+
+          const endpointMap = {
+            brain_agi_status: '/v1/status',
+            brain_sona_stats: '/v1/sona/stats',
+            brain_temporal: '/v1/temporal',
+            brain_explore: '/v1/explore',
+            brain_midstream: '/v1/midstream',
+            brain_flags: '/v1/status',
+          };
+          const endpoint = endpointMap[name];
+          const resp = await proxyFetch(`${brainUrl}${endpoint}`, { headers: hdrs, signal: AbortSignal.timeout(30000) });
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => resp.statusText);
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: `${resp.status} ${errText}` }, null, 2) }], isError: true };
+          }
+          let data = await resp.json();
+
+          // For brain_flags, extract only flag-related fields
+          if (name === 'brain_flags') {
+            const flags = {};
+            for (const [k, v] of Object.entries(data)) {
+              if (typeof v === 'boolean' || k.startsWith('rvf_') || k.endsWith('_enabled') || (k.startsWith('midstream_') && typeof v === 'boolean')) {
+                flags[k] = v;
+              }
+            }
+            data = flags;
+          }
+
+          // For brain_agi_status, extract AGI-specific fields
+          if (name === 'brain_agi_status') {
+            const agiFields = {};
+            const agiKeys = ['sona_patterns', 'sona_trajectories', 'sona_background_ticks', 'gwt_workspace_load', 'gwt_avg_salience', 'knowledge_velocity', 'temporal_deltas', 'temporal_trend', 'meta_avg_regret', 'meta_plateau_status', 'midstream_scheduler_ticks', 'midstream_attractor_categories', 'midstream_strange_loop_version'];
+            for (const k of agiKeys) {
+              if (data[k] !== undefined) agiFields[k] = data[k];
+            }
+            data = Object.keys(agiFields).length > 0 ? agiFields : data;
+          }
+
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...data }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      // ── Midstream Tool Handlers ────────────────────────────────────────────
+      case 'midstream_status':
+      case 'midstream_attractor':
+      case 'midstream_scheduler': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+
+          const resp = await proxyFetch(`${brainUrl}/v1/midstream`, { headers: hdrs, signal: AbortSignal.timeout(30000) });
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => resp.statusText);
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: `${resp.status} ${errText}` }, null, 2) }], isError: true };
+          }
+          let data = await resp.json();
+
+          if (name === 'midstream_attractor') {
+            data = data.attractor_categories || data.attractors || data;
+            if (args.category && typeof data === 'object') data = data[args.category] || { error: `Category '${args.category}' not found` };
+          } else if (name === 'midstream_scheduler') {
+            data = data.scheduler || { ticks: data.scheduler_ticks || 0 };
+          }
+
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...data }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'midstream_benchmark': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+          const concurrentN = Math.min(args.concurrent_count || 20, 100);
+
+          async function timeFetch(url) {
+            const start = performance.now();
+            const resp = await proxyFetch(url, { headers: hdrs });
+            return { status: resp.status, elapsed: performance.now() - start };
+          }
+
+          // Sequential tests
+          const endpoints = [
+            { path: '/v1/health', label: 'health' },
+            { path: '/v1/status', label: 'status' },
+            { path: '/v1/memories/search?q=test&limit=3', label: 'search' },
+            { path: '/v1/midstream', label: 'midstream' },
+          ];
+
+          const sequential = {};
+          for (const ep of endpoints) {
+            const times = [];
+            for (let i = 0; i < 3; i++) {
+              const r = await timeFetch(brainUrl + ep.path);
+              times.push(r.elapsed);
+            }
+            sequential[ep.label] = {
+              avg_ms: +(times.reduce((a, b) => a + b, 0) / times.length).toFixed(1),
+              min_ms: +Math.min(...times).toFixed(1),
+              max_ms: +Math.max(...times).toFixed(1)
+            };
+          }
+
+          // Concurrent search
+          const promises = [];
+          for (let i = 0; i < concurrentN; i++) {
+            promises.push(timeFetch(brainUrl + '/v1/memories/search?q=test&limit=3'));
+          }
+          const results = await Promise.all(promises);
+          const sorted = results.map(r => r.elapsed).sort((a, b) => a - b);
+          const pct = (p) => +(sorted[Math.max(0, Math.ceil(sorted.length * p / 100) - 1)]).toFixed(1);
+
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            sequential,
+            concurrent: { count: concurrentN, p50_ms: pct(50), p90_ms: pct(90), p99_ms: pct(99) }
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'midstream_search': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+          const limit = Math.min(Math.max(parseInt(args.limit) || 10, 1), 100);
+          const q = encodeURIComponent(args.query);
+          const resp = await proxyFetch(`${brainUrl}/v1/memories/search?q=${q}&limit=${limit}`, { headers: hdrs, signal: AbortSignal.timeout(30000) });
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => resp.statusText);
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: `${resp.status} ${errText}` }, null, 2) }], isError: true };
+          }
+          const data = await resp.json();
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, results: data, count: Array.isArray(data) ? data.length : 0 }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      case 'midstream_health': {
+        try {
+          const brainUrl = process.env.BRAIN_URL || 'https://pi.ruv.io';
+          const brainKey = process.env.PI;
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (brainKey) hdrs['Authorization'] = `Bearer ${brainKey}`;
+
+          const [healthResp, midResp] = await Promise.all([
+            proxyFetch(`${brainUrl}/v1/health`, { headers: hdrs, signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(e => ({ error: e.message })),
+            proxyFetch(`${brainUrl}/v1/midstream`, { headers: hdrs, signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(e => ({ error: e.message })),
+          ]);
+
+          return { content: [{ type: 'text', text: JSON.stringify({
+            success: true,
+            health: healthResp,
+            midstream: midResp
+          }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      // ── Edge Tool Handlers ───────────────────────────────────────────────
+      case 'edge_status':
+      case 'edge_join':
+      case 'edge_balance':
+      case 'edge_tasks': {
+        try {
+          const genesisUrl = process.env.EDGE_GENESIS_URL || 'https://edge-net-genesis-875130704813.us-central1.run.app';
+          const subCmd = name.replace('edge_', '');
+          let endpoint, method = 'GET', body;
+          switch (subCmd) {
+            case 'status': endpoint = '/status'; break;
+            case 'join': endpoint = '/join'; method = 'POST'; body = JSON.stringify({ contribution: args.contribution || 0.3, pi_key: process.env.PI }); break;
+            case 'balance': { const ps = process.env.PI ? require('crypto').createHash('shake256', { outputLength: 16 }).update(process.env.PI).digest('hex') : 'anonymous'; endpoint = `/balance/${ps}`; break; }
+            case 'tasks': endpoint = `/tasks?limit=${args.limit || 20}`; break;
+          }
+          const resp = await proxyFetch(`${genesisUrl}${endpoint}`, {
+            method,
+            headers: { 'Content-Type': 'application/json', ...(process.env.PI ? { 'Authorization': `Bearer ${process.env.PI}` } : {}) },
+            ...(body ? { body } : {})
+          });
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => resp.statusText);
+            return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: `${resp.status} ${errText}` }, null, 2) }], isError: true };
+          }
+          const data = await resp.json();
+          return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...data }, null, 2) }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: e.message }, null, 2) }], isError: true };
+        }
+      }
+
+      // ── Identity Tool Handlers ───────────────────────────────────────────
+      case 'identity_generate': {
+        const crypto = require('crypto');
+        const key = crypto.randomBytes(32).toString('hex');
+        const hash = crypto.createHash('shake256', { outputLength: 16 });
+        hash.update(key);
+        const pseudonym = hash.digest('hex');
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, pi_key: key, pseudonym, warning: 'Store this key securely. Set PI env var to use it.' }, null, 2) }] };
+      }
+
+      case 'identity_show': {
+        const piKey = process.env.PI;
+        if (!piKey) {
+          return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'No PI environment variable set. Run identity_generate first.' }, null, 2) }], isError: true };
+        }
+        const crypto = require('crypto');
+        const hash = crypto.createHash('shake256', { outputLength: 16 });
+        hash.update(piKey);
+        const pseudonym = hash.digest('hex');
+        const mcpToken = crypto.createHmac('sha256', piKey).update('mcp').digest('hex').slice(0, 32);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, pseudonym, mcp_token: mcpToken, key_prefix: piKey.slice(0, 8) + '...' }, null, 2) }] };
+      }
+
+      default:
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ success: false, error: `Unknown tool: ${name}` }, null, 2)
+          }],
+          isError: true
+        };
+    }
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ success: false, error: error.message }, null, 2)
+      }],
+      isError: true
+    };
+  }
+});
+
+// Resources - expose intelligence data
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return {
+    resources: [
+      {
+        uri: 'ruvector://intelligence/stats',
+        name: 'Intelligence Stats',
+        description: 'Current RuVector intelligence statistics',
+        mimeType: 'application/json'
+      },
+      {
+        uri: 'ruvector://intelligence/patterns',
+        name: 'Learned Patterns',
+        description: 'Q-learning patterns for agent routing',
+        mimeType: 'application/json'
+      },
+      {
+        uri: 'ruvector://intelligence/memories',
+        name: 'Vector Memories',
+        description: 'Stored context memories',
+        mimeType: 'application/json'
+      }
+    ]
+  };
+});
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+
+  switch (uri) {
+    case 'ruvector://intelligence/stats':
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(intel.stats(), null, 2)
+        }]
+      };
+
+    case 'ruvector://intelligence/patterns':
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(intel.data.patterns || {}, null, 2)
+        }]
+      };
+
+    case 'ruvector://intelligence/memories':
+      return {
+        contents: [{
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify((intel.data.memories || []).map(m => ({
+            content: m.content,
+            type: m.type,
+            created: m.created
+          })), null, 2)
+        }]
+      };
+
+    default:
+      throw new Error(`Unknown resource: ${uri}`);
+  }
+});
+
+// Start server
+async function main() {
+  const transportType = process.env.MCP_TRANSPORT || 'stdio';
+
+  if (transportType === 'sse') {
+    const http = require('http');
+    const crypto = require('crypto');
+    const port = parseInt(process.env.MCP_PORT || '8080', 10);
+    const host = process.env.MCP_HOST || '0.0.0.0';
+
+    // SSE MCP Transport Implementation
+    // MCP over SSE uses:
+    //   GET /sse - SSE stream for server->client messages
+    //   POST /message - client->server JSON-RPC messages
+
+    const sessions = new Map();
+
+    const httpServer = http.createServer(async (req, res) => {
+      // CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      const url = new URL(req.url, `http://${req.headers.host}`);
+
+      if (req.method === 'GET' && url.pathname === '/sse') {
+        // SSE endpoint - establish persistent connection
+        const sessionId = crypto.randomUUID();
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        });
+
+        // Send endpoint event so client knows where to POST
+        const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+        const messageUrl = `http://${displayHost}:${port}/message?sessionId=${sessionId}`;
+        res.write(`event: endpoint\ndata: ${messageUrl}\n\n`);
+
+        // Store session
+        sessions.set(sessionId, {
+          res,
+          messageQueue: [],
+        });
+
+        // Create a custom transport for this session
+        const sessionTransport = {
+          _onMessage: null,
+          _onClose: null,
+          _onError: null,
+          _started: false,
+
+          async start() {
+            this._started = true;
+          },
+
+          async close() {
+            sessions.delete(sessionId);
+            if (!res.writableEnded) {
+              res.end();
+            }
+          },
+
+          async send(message) {
+            if (!res.writableEnded) {
+              res.write(`event: message\ndata: ${JSON.stringify(message)}\n\n`);
+            }
+          },
+
+          set onmessage(handler) { this._onMessage = handler; },
+          get onmessage() { return this._onMessage; },
+          set onclose(handler) { this._onClose = handler; },
+          get onclose() { return this._onClose; },
+          set onerror(handler) { this._onError = handler; },
+          get onerror() { return this._onError; },
+        };
+
+        sessions.get(sessionId).transport = sessionTransport;
+
+        // Connect server to this transport
+        await server.connect(sessionTransport);
+
+        // Process any queued messages
+        const session = sessions.get(sessionId);
+        if (session) {
+          for (const msg of session.messageQueue) {
+            if (sessionTransport._onMessage) {
+              sessionTransport._onMessage(msg);
+            }
+          }
+          session.messageQueue = [];
+        }
+
+        // Handle disconnect
+        req.on('close', () => {
+          sessions.delete(sessionId);
+          if (sessionTransport._onClose) {
+            sessionTransport._onClose();
+          }
+        });
+
+      } else if (req.method === 'POST' && url.pathname === '/message') {
+        // Message endpoint - receive client JSON-RPC messages
+        const sessionId = url.searchParams.get('sessionId');
+        const session = sessions.get(sessionId);
+
+        if (!session) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Session not found' }));
+          return;
+        }
+
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const message = JSON.parse(body);
+
+            if (session.transport && session.transport._onMessage) {
+              session.transport._onMessage(message);
+            } else {
+              session.messageQueue.push(message);
+            }
+
+            res.writeHead(202, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'accepted' }));
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          }
+        });
+
+      } else if (req.method === 'GET' && url.pathname === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          transport: 'sse',
+          sessions: sessions.size,
+          tools: 91,
+          version: '0.2.13'
+        }));
+
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found. Use GET /sse for SSE stream, POST /message for JSON-RPC, GET /health for status.' }));
+      }
+    });
+
+    httpServer.listen(port, host, () => {
+      const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+      console.error(`RuVector MCP server running on SSE at http://${host}:${port}`);
+      console.error(`  SSE endpoint:     http://${displayHost}:${port}/sse`);
+      console.error(`  Message endpoint: http://${displayHost}:${port}/message`);
+      console.error(`  Health check:     http://${displayHost}:${port}/health`);
+    });
+
+  } else {
+    // Default: stdio transport
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('RuVector MCP server running on stdio');
+  }
+}
+
+main().catch(console.error);

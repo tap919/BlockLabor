@@ -1,0 +1,76 @@
+{
+  "mcpServers": [
+    {
+      "id": "business-logic",
+      "name": "Business Logic MCP",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/Business-Logic-MCP-main/dist/index.js"],
+      "enabled": true
+    },
+    {
+      "id": "og-glass",
+      "name": "OG Glass UI Presets",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/OG-Glass-main/dist/index.js"],
+      "enabled": true
+    },
+    {
+      "id": "file-converter",
+      "name": "UFC File Converter",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/UFC-MCP-main/dist/index.js"],
+      "enabled": true
+    },
+    {
+      "id": "bigback",
+      "name": "BigBack Infrastructure Config",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/BigBack--main/dist/index.js"],
+      "enabled": true
+    },
+    {
+      "id": "bobby-breakdown",
+      "name": "Bobby Breakdown Concept Analysis",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/Bobby-Breakdown--main/dist-mcp/index.js"],
+      "enabled": true
+    },
+    {
+      "id": "lucide-icons",
+      "name": "Lucide Icon Library",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/lucide-main/mcp-server/dist/index.js"],
+      "enabled": true
+    },
+    {
+      "id": "middle-man",
+      "name": "Middle Man API Gateway",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/Middle-Man-MCP-main/src/mcp-server.js"],
+      "enabled": true
+    },
+    {
+      "id": "monaco-bluetooth",
+      "name": "Monaco Bluetooth Controller",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/Monaco-Bluetooth--main/dist/index.js"],
+      "enabled": true
+    },
+    {
+      "id": "ruvector",
+      "name": "RuVector Database",
+      "type": "stdio",
+      "command": "node",
+      "args": ["MCP/ruvector-main/mcp-entry.js"],
+      "enabled": true
+    }
+  ]
+}

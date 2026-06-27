@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  middleman:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - USER_SERVICE_URL=http://user-service:3001
+      - PAYMENT_SERVICE_URL=http://payment-service:3002
+      - CDN_URL=http://cdn:8080
+    depends_on:
+      - user-service
+      - payment-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  user-service:
+    image: node:20-alpine
+    command: >
+      sh -c "node -e \"
+        const http = require('http');
+        http.createServer((req, res) => {
+          res.writeHead(200, {'Content-Type': 'application/json'});
+          res.end(JSON.stringify({service: 'user-service', path: req.url}));
+        }).listen(3001, () => console.log('user-service on 3001'));
+      \""
+    ports:
+      - "3001:3001"
+
+  payment-service:
+    image: node:20-alpine
+    command: >
+      sh -c "node -e \"
+        const http = require('http');
+        http.createServer((req, res) => {
+          res.writeHead(200, {'Content-Type': 'application/json'});
+          res.end(JSON.stringify({service: 'payment-service', path: req.url}));
+        }).listen(3002, () => console.log('payment-service on 3002'));
+      \""
+    ports:
+      - "3002:3002"
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped

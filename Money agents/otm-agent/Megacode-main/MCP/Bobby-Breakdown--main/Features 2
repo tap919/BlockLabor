@@ -1,0 +1,40 @@
+1. Deep Context Understanding
+A real developer understands why  code exists, not just what  it does. The tool needs to grasp:
+ 
+Business logic and domain constraints
+ 
+The broader architecture and how this piece fits
+ 
+Historical decisions (tech debt, workarounds, intentional trade-offs)
+ 
+Non-code context (ticket requirements, team conventions, stakeholder needs)
+2. Intent Inference Over Pattern Matching
+Humans infer intent  from ambiguous signals. The tool must:
+ 
+Read between the lines of poorly named variables or rushed comments
+ 
+Understand the goal even when the implementation is messy
+ 
+Recognize when code is temporary vs. production-ready
+ 
+Distinguish between "this works but is wrong" vs. "this is unconventional but correct"
+3. Holistic System Awareness
+Developers don't review code in isolation. The tool needs:
+ 
+Cross-file and cross-service impact analysis
+ 
+Understanding of runtime behavior, not just static syntax
+ 
+Awareness of deployment constraints, performance characteristics, and failure modes
+ 
+Knowledge of what isn't  in the codebase (missing tests, undocumented edge cases)
+4. Judgment Under Uncertainty
+Real developers make calls with incomplete information. The tool must:
+ 
+Flag risks proportionally (not every code smell is critical)
+ 
+Know when to suggest vs. when to ask for clarification
+ 
+Balance idealism with pragmatism (perfect vs. shipped)
+ 
+Recognize its own limitations and defer appropriately

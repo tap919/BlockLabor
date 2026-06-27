@@ -1,0 +1,13 @@
+{
+  "name": "marathon-session",
+  "version": "1.0.0",
+  "description": "Tools for deep, long-duration coding sessions in OverCoat",
+  "author": "OverCoat",
+  "commands": [
+    {
+      "name": "marathon",
+      "description": "Start or manage a marathon coding session with checkpoints and break reminders",
+      "file": "commands/marathon.md"
+    }
+  ]
+}

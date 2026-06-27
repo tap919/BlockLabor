@@ -1,0 +1,10 @@
+{
+  "id": "client-dark-minimal",
+  "name": "Client Dark Minimal",
+  "description": "Monochrome, reduced glass intensity — minimal distraction UI",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["client", "dark", "minimal", "monochrome"],
+  "components": [],
+  "layouts": []
+}

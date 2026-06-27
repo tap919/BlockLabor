@@ -32,7 +32,9 @@ export const mockJobs: Job[] = [
     recruiterName: 'Sonia K.',
     branchName: 'Dallas Logistics',
     stateCode: 'TX',
-    invoiceTermDays: 30
+    invoiceTermDays: 30,
+    verificationStatus: 'pending',
+    applicationResponseSLA: null,
   },
   {
     id: 'job-102',
@@ -65,7 +67,9 @@ export const mockJobs: Job[] = [
     recruiterName: 'David L.',
     branchName: 'Houston East',
     stateCode: 'TX',
-    invoiceTermDays: 15
+    invoiceTermDays: 15,
+    verificationStatus: 'pending',
+    applicationResponseSLA: null,
   },
   {
     id: 'job-103',
@@ -104,7 +108,9 @@ export const mockJobs: Job[] = [
     recruiterName: 'Elisa M.',
     branchName: 'San Francisco Main',
     stateCode: 'CA',
-    invoiceTermDays: 30
+    invoiceTermDays: 30,
+    verificationStatus: 'pending',
+    applicationResponseSLA: null,
   },
   {
     id: 'job-104',
@@ -155,7 +161,9 @@ export const mockJobs: Job[] = [
     ],
     deductionsCaptured: [
       { id: 'ded-101', amount: 12.00, description: 'Uniform safety security badge' }
-    ]
+    ],
+    verificationStatus: 'pending',
+    applicationResponseSLA: null,
   },
   {
     id: 'job-105',
@@ -199,7 +207,9 @@ export const mockJobs: Job[] = [
     stateCode: 'TX',
     invoiceTermDays: 30,
     shiftHours: 8,
-    overtimeHours: 0
+    overtimeHours: 0,
+    verificationStatus: 'pending',
+    applicationResponseSLA: null
   }
 ];
 
@@ -216,6 +226,7 @@ export const mockCandidates: WorkerCandidate[] = [
     backgroundCheckStatus: 'passed',
     eSignStatus: 'signed',
     verifiedCredentials: ['forklift_cert', 'heavy_lifting_waiver', 'typing_speed'],
+    workerVerificationStatus: 'pending',
     weeklyAvailability: { Monday: true, Tuesday: true, Wednesday: true, Thursday: true, Friday: true, Saturday: false, Sunday: false },
     shiftPreferences: ['morning', 'afternoon'],
     payOption: 'direct_deposit',
@@ -256,6 +267,7 @@ export const mockCandidates: WorkerCandidate[] = [
     backgroundCheckStatus: 'passed',
     eSignStatus: 'signed',
     verifiedCredentials: ['food_handler', 'sanitation_induction', 'bls_cert', 'hipaa_cert'],
+    workerVerificationStatus: 'pending',
     weeklyAvailability: { Monday: true, Tuesday: false, Wednesday: true, Thursday: false, Friday: true, Saturday: true, Sunday: true },
     shiftPreferences: ['afternoon', 'night'],
     payOption: 'pay_card',
@@ -296,6 +308,7 @@ export const mockCandidates: WorkerCandidate[] = [
     backgroundCheckStatus: 'passed',
     eSignStatus: 'signed',
     verifiedCredentials: ['heavy_lifting_waiver'],
+    workerVerificationStatus: 'pending',
     weeklyAvailability: { Monday: true, Tuesday: true, Wednesday: true, Thursday: true, Friday: true, Saturday: true, Sunday: false },
     shiftPreferences: ['morning', 'night'],
     payOption: 'direct_deposit',
@@ -334,6 +347,7 @@ export const mockCandidates: WorkerCandidate[] = [
     backgroundCheckStatus: 'pending',
     eSignStatus: 'sent',
     verifiedCredentials: ['bls_cert'],
+    workerVerificationStatus: 'pending',
     weeklyAvailability: { Monday: false, Tuesday: true, Wednesday: false, Thursday: true, Friday: false, Saturday: false, Sunday: false },
     shiftPreferences: ['morning'],
     payOption: 'direct_deposit',

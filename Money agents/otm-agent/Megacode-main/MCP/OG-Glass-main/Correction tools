@@ -1,0 +1,304 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// tools/correctionTools.ts  –  Autocorrect, validate, and generate UI tools
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { requireActivePreset, getEffectiveTokens } from "../services/sessionState.js";
+import { correctComponent, validateComponent } from "../services/uiCorrector.js";
+import { resolveTokens, generateCSSVariables, generateTokenExport, generateTailwindExtend } from "../services/tokenResolver.js";
+import {
+  AutocorrectComponentSchema,
+  ValidateUISchema,
+  GenerateComponentSchema,
+  GenerateTokensSchema,
+  ApplyTokenOverridesSchema,
+} from "../schemas/toolSchemas.js";
+import type { DesignTokens } from "../types/index.js";
+
+export function registerCorrectionTools(server: McpServer): void {
+
+  // ── autocorrect_component ───────────────────────────────────────────────────
+  server.registerTool(
+    "autocorrect_component",
+    {
+      title: "Autocorrect Component",
+      description: `Analyze a React component and auto-correct it against the active preset.
+Corrects: hardcoded colors, missing glass treatment, wrong typography tokens,
+wrong animation tokens, non-conforming sidebar/settings structure.
+
+Args:
+  - code (string): React component source code (max 10,000 chars)
+  - context ('sidebar'|'settings'|'dashboard'|'surface'|'navigation'|'form'|'auto'): 
+      Component context hint for targeted rules (default: 'auto')
+  - dry_run (boolean): Return issues without changing code (default: false)
+
+Returns:
+  - corrected: Fixed component code
+  - issues: Array of UIIssue objects with severity, rule, message, fix
+  - appliedFixes: List of changes made
+  - score: Conformance score before correction (0-100)
+
+Requires active preset (run load_preset first).`,
+      inputSchema: AutocorrectComponentSchema,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ code, context, dry_run }) => {
+      const preset = requireActivePreset("autocorrect_component");
+      const tokens = getEffectiveTokens();
+
+      if (dry_run) {
+        const validation = validateComponent(code, preset, tokens);
+        return {
+          content: [{ type: "text", text: JSON.stringify(validation, null, 2) }],
+          structuredContent: validation,
+        };
+      }
+
+      const result = correctComponent(
+        code,
+        preset,
+        tokens,
+        context === "auto" ? undefined : context
+      );
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      };
+    }
+  );
+
+  // ── validate_ui ─────────────────────────────────────────────────────────────
+  server.registerTool(
+    "validate_ui",
+    {
+      title: "Validate UI",
+      description: `Validate a React component against the active preset rules without modifying code.
+Returns a conformance score (0–100) and detailed issue list.
+
+Args:
+  - code (string): React component source code
+  - include_suggestions (boolean): Include info-level suggestions (default: true)
+
+Returns:
+  - valid (boolean): No errors found
+  - score (number): 0–100 conformance score
+  - issues: Array of { severity, rule, message, fix } objects
+  - presetUsed: Which preset was applied
+
+Requires active preset.`,
+      inputSchema: ValidateUISchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ code, include_suggestions }) => {
+      const preset = requireActivePreset("validate_ui");
+      const tokens = getEffectiveTokens();
+
+      let result = validateComponent(code, preset, tokens);
+
+      if (!include_suggestions) {
+        result = {
+          ...result,
+          issues: result.issues.filter((i) => i.severity !== "info"),
+        };
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      };
+    }
+  );
+
+  // ── generate_component ──────────────────────────────────────────────────────
+  server.registerTool(
+    "generate_component",
+    {
+      title: "Generate Component",
+      description: `Generate a React component from a preset template, with tokens resolved.
+Templates come from the active preset's component library.
+
+Args:
+  - template_name (string): Component template to generate (e.g. 'GlassCard', 'Sidebar', 'OptionGroup')
+  - props (object): Props to inject into the template (default: {})
+  - variant (string, optional): Template variant (e.g. 'compact', 'wide', 'collapsible')
+
+Returns:
+  - code: Generated React component with tokens resolved
+  - templateUsed: Name of the resolved template
+  - availableProps: Schema of props the template accepts
+
+Run list_presets with include_metadata to see available templates.
+Requires active preset.`,
+      inputSchema: GenerateComponentSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ template_name, props, variant }) => {
+      const preset = requireActivePreset("generate_component");
+      const tokens = getEffectiveTokens();
+
+      const template = preset.components[template_name];
+      if (!template) {
+        const available = Object.keys(preset.components).join(", ");
+        return {
+          content: [{
+            type: "text",
+            text: `Error: Template '${template_name}' not found in preset '${preset.manifest.id}'.\nAvailable: ${available}`,
+          }],
+          structuredContent: { error: "Template not found", available: Object.keys(preset.components) },
+        };
+      }
+
+      // Apply variant overrides if specified
+      const activeTemplate =
+        variant && template.variants?.[variant]
+          ? { ...template, ...template.variants[variant] }
+          : template;
+
+      // Resolve token placeholders
+      let code = resolveTokens(activeTemplate.template, tokens);
+
+      // Inject props into template
+      code = injectProps(code, props as Record<string, unknown>);
+
+      const result = {
+        code,
+        templateUsed: template_name,
+        variant: variant ?? "default",
+        availableProps: activeTemplate.propsSchema,
+      };
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      };
+    }
+  );
+
+  // ── generate_tokens ─────────────────────────────────────────────────────────
+  server.registerTool(
+    "generate_tokens",
+    {
+      title: "Generate Tokens",
+      description: `Export the active preset's design tokens in various formats for use in your project.
+
+Args:
+  - format ('css'|'js'|'json'|'tailwind'): Output format (default: 'css')
+    - css: :root { --color-surface: ...; } CSS custom properties
+    - js: TypeScript const export for use with style objects
+    - json: Raw token JSON
+    - tailwind: theme.extend config for tailwind.config.js
+  - include_comments (boolean): Add section headers in output (default: true)
+
+Returns: Token file content as a string.
+Requires active preset.`,
+      inputSchema: GenerateTokensSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ format, include_comments }) => {
+      const preset = requireActivePreset("generate_tokens");
+      const tokens = getEffectiveTokens();
+
+      let output: string;
+      const header = include_comments
+        ? `/* Generated by UI Preset MCP Server\n   Preset: ${preset.manifest.id} v${preset.manifest.version}\n   Generated: ${new Date().toISOString()}\n*/\n\n`
+        : "";
+
+      switch (format) {
+        case "css":
+          output = header + generateCSSVariables(tokens);
+          break;
+        case "js":
+          output = header + generateTokenExport(tokens);
+          break;
+        case "json":
+          output = JSON.stringify(tokens, null, 2);
+          break;
+        case "tailwind":
+          output = header + generateTailwindExtend(tokens);
+          break;
+        default:
+          output = JSON.stringify(tokens, null, 2);
+      }
+
+      return {
+        content: [{ type: "text", text: output }],
+        structuredContent: { format, length: output.length, presetId: preset.manifest.id },
+      };
+    }
+  );
+
+  // ── apply_token_overrides ───────────────────────────────────────────────────
+  server.registerTool(
+    "apply_token_overrides",
+    {
+      title: "Apply Token Overrides",
+      description: `Apply runtime token overrides on top of the active preset (deep merged).
+Overrides are applied in memory only unless persist: true writes them to disk.
+Useful for per-client accent color changes without creating a full preset.
+
+Args:
+  - overrides (object): Partial DesignTokens object (deeply merged over active tokens)
+  - persist (boolean): Write overrides to preset/overrides.json on disk (default: false)
+
+Example overrides:
+  { "colors": { "accent": { "primary": "#2563eb" } } }
+
+Returns: Confirmation of applied override paths.
+Requires active preset.`,
+      inputSchema: ApplyTokenOverridesSchema,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ overrides, persist }) => {
+      const preset = requireActivePreset("apply_token_overrides");
+      const { applyTokenOverrides } = await import("../services/sessionState.js");
+
+      applyTokenOverrides(overrides as Partial<DesignTokens>);
+
+      const appliedPaths = flattenPaths(overrides as Record<string, unknown>);
+
+      if (persist) {
+        const { PRESETS_DIR } = await import("../constants.js");
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const overridePath = path.join(PRESETS_DIR, preset.manifest.id, "overrides.json");
+        await fs.writeFile(overridePath, JSON.stringify(overrides, null, 2));
+      }
+
+      const result = {
+        appliedPaths,
+        persisted: persist,
+        presetId: preset.manifest.id,
+      };
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      };
+    }
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function injectProps(template: string, props: Record<string, unknown>): string {
+  let result = template;
+  for (const [key, value] of Object.entries(props)) {
+    const placeholder = new RegExp(`\\{\\{prop:${key}\\}\\}`, "g");
+    result = result.replace(placeholder, String(value));
+  }
+  return result;
+}
+
+function flattenPaths(obj: Record<string, unknown>, prefix = ""): string[] {
+  const paths: string[] = [];
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      paths.push(...flattenPaths(value as Record<string, unknown>, fullKey));
+    } else {
+      paths.push(fullKey);
+    }
+  }
+  return paths;
+}

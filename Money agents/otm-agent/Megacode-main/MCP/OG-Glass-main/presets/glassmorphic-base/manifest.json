@@ -1,0 +1,9 @@
+{
+  "id": "glassmorphic-base",
+  "name": "Glassmorphic Base",
+  "description": "Core glassmorphic preset. All other presets inherit from this.",
+  "version": "1.0.0",
+  "tags": ["base", "glass", "dark"],
+  "components": ["Sidebar", "GlassCard", "OptionGroup", "NavGroup"],
+  "layouts": ["DashboardLayout"]
+}

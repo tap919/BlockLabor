@@ -1,7 +1,26 @@
-import { FormEvent } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { PRICING_BLOCKS, CATEGORIES_BY_VERTICAL } from '../../constants';
-import { BookingFormValues } from './booking.types';
+import type { BranchDivision, RateCard, VerticalType } from '../../shared/types/domain';
+import type { FormEvent } from 'react';
+
+interface BookingFormProps {
+  values: {
+    businessName: string;
+    location: string;
+    selectedVertical: VerticalType;
+    selectedCategory: string;
+    selectedBlockId: string;
+    selectedBranch: string;
+    startWindow: string;
+    skillsText: string;
+  };
+  setValues: (values: any) => void;
+  isEnterprise: boolean;
+  branches: BranchDivision[];
+  activeRateCard?: RateCard;
+  onSubmit: (e: FormEvent) => void;
+  selectedVertical: VerticalType;
+}
 
 export function BookingForm({
   values,
@@ -11,7 +30,7 @@ export function BookingForm({
   activeRateCard,
   onSubmit,
   selectedVertical
-}: any) {
+}: BookingFormProps) {
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">

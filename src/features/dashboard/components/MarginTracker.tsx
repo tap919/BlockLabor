@@ -46,17 +46,20 @@ export function MarginTracker({ jobs, candidates }: MarginTrackerProps) {
     };
 
     jobs.forEach(j => {
-      const startHour = j.shiftStartTime ? parseInt(j.shiftStartTime.split(':')[0]) : 8;
+      const startHour = j.shiftStartTime ? parseInt(j.shiftStartTime.split(':')[0] ?? '8', 10) : 8;
       let shiftKey = 'Morning Shift (6AM-2PM)';
       if (startHour >= 14 && startHour < 22) {
         shiftKey = 'Afternoon Shift (2PM-10PM)';
       } else if (startHour >= 22 || startHour < 6) {
         shiftKey = 'Night/Graveyard Shift (10PM-6AM)';
       }
-      
-      map[shiftKey].billed += j.charge;
-      map[shiftKey].pay += j.payout;
-      map[shiftKey].count += 1;
+
+      const entry = map[shiftKey];
+      if (entry) {
+        entry.billed += j.charge;
+        entry.pay += j.payout;
+        entry.count += 1;
+      }
     });
 
     return Object.values(map).map(s => {

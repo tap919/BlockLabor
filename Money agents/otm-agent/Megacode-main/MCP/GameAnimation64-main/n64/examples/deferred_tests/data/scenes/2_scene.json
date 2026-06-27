@@ -1,0 +1,329 @@
+{
+  "conf": {
+    "clearColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "doClearColor": true,
+    "doClearDepth": true,
+    "fbFormat": 0,
+    "fbHeight": 240,
+    "fbWidth": 320,
+    "filter": 1,
+    "frameLimit": 0,
+    "layers2D": [
+      {
+        "blender": 0,
+        "depthCompare": false,
+        "depthWrite": false,
+        "fog": false,
+        "fogColor": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "fogColorMode": 0,
+        "fogMax": 0.0,
+        "fogMin": 0.0,
+        "name": "2D"
+      }
+    ],
+    "layers3D": [
+      {
+        "blender": 0,
+        "depthCompare": true,
+        "depthWrite": true,
+        "fog": false,
+        "fogColor": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "fogColorMode": 0,
+        "fogMax": 0.0,
+        "fogMin": 0.0,
+        "name": "3D Opaque"
+      }
+    ],
+    "layersPtx": [
+      {
+        "blender": 0,
+        "depthCompare": true,
+        "depthWrite": true,
+        "fog": false,
+        "fogColor": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "fogColorMode": 0,
+        "fogMax": 0.0,
+        "fogMin": 0.0,
+        "name": "PTX Opaque"
+      }
+    ],
+    "name": "Deferred Test - Multiple Lights Stress",
+    "renderPipeline": 1
+  },
+  "graph": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [],
+            "components": [
+              {
+                "data": {
+                  "color": [
+                    0.1,
+                    0.1,
+                    0.1,
+                    1.0
+                  ],
+                  "index": 0,
+                  "type": 0
+                },
+                "id": 2,
+                "name": "Light",
+                "uuid": 16497944062403456447
+              }
+            ],
+            "enabled": true,
+            "id": 4,
+            "name": "Ambient Light",
+            "pos": [
+              0.0,
+              100.0,
+              0.0
+            ],
+            "propOverrides": {},
+            "rot": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "selectable": true,
+            "uuid": 3825197670,
+            "uuidPrefab": 0
+          },
+          {
+            "children": [],
+            "components": [
+              {
+                "data": {
+                  "color": [
+                    0.5,
+                    0.5,
+                    0.5,
+                    1.0
+                  ],
+                  "index": 0,
+                  "type": 1
+                },
+                "id": 2,
+                "name": "Light",
+                "uuid": 605723811929282716
+              }
+            ],
+            "enabled": true,
+            "id": 5,
+            "name": "Directional Light",
+            "pos": [
+              0.0,
+              100.0,
+              0.0
+            ],
+            "propOverrides": {},
+            "rot": [
+              0.7071067811865476,
+              0.0,
+              0.0,
+              0.7071067811865476
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "selectable": true,
+            "uuid": 1228635129,
+            "uuidPrefab": 0
+          }
+        ],
+        "components": [],
+        "enabled": true,
+        "id": 3,
+        "name": "Base Lights",
+        "pos": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "propOverrides": {},
+        "rot": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "selectable": true,
+        "uuid": 593857752,
+        "uuidPrefab": 0
+      },
+      {
+        "children": [],
+        "components": [
+          {
+            "data": {
+              "aspect": 0.0,
+              "far": 1000.0,
+              "fov": 60.0,
+              "near": 1.0,
+              "vpOffset": [
+                0,
+                0
+              ],
+              "vpSize": [
+                320,
+                240
+              ]
+            },
+            "id": 3,
+            "name": "Camera",
+            "uuid": 591397515709753079
+          }
+        ],
+        "enabled": true,
+        "id": 10,
+        "name": "Test Camera",
+        "pos": [
+          0.0,
+          50.0,
+          80.0
+        ],
+        "propOverrides": {},
+        "rot": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "selectable": true,
+        "uuid": 2593312191,
+        "uuidPrefab": 0
+      },
+      {
+        "children": [],
+        "components": [
+          {
+            "data": {
+              "culling": false,
+              "layerIdx": 0,
+              "material": {
+                "depth": 0,
+                "env": [
+                  0.5,
+                  0.5,
+                  0.5,
+                  1.0
+                ],
+                "fresnel": 0.1,
+                "fresnelColor": [
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "lighting": true,
+                "prim": [
+                  0.7,
+                  0.7,
+                  0.7,
+                  1.0
+                ],
+                "setDepth": false,
+                "setEnv": true,
+                "setFresnel": true,
+                "setLighting": true,
+                "setPrim": true
+              },
+              "meshFilter": "",
+              "model": 67300967874118795
+            },
+            "id": 1,
+            "name": "Model",
+            "uuid": 3016539882722051056
+          }
+        ],
+        "enabled": true,
+        "id": 20,
+        "name": "Ground Plane",
+        "pos": [
+          0.0,
+          -10.0,
+          0.0
+        ],
+        "propOverrides": {},
+        "rot": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          100.0,
+          1.0,
+          100.0
+        ],
+        "selectable": true,
+        "uuid": 668301590,
+        "uuidPrefab": 0
+      }
+    ],
+    "components": [],
+    "enabled": true,
+    "id": 0,
+    "name": "Multiple Lights Stress Test",
+    "pos": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "propOverrides": {},
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "selectable": true,
+    "uuid": 4252910706,
+    "uuidPrefab": 0
+  }
+}

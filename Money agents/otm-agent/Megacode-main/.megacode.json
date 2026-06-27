@@ -1,0 +1,9 @@
+{
+  "llm": {
+    "provider": "openai",
+    "apiKey": "REPLACE_WITH_YOUR_OPENCODE_API_KEY",
+    "model": "claude-opus-4-6",
+    "baseUrl": "https://opencode.ai/zen"
+  },
+  "mcpServers": []
+}

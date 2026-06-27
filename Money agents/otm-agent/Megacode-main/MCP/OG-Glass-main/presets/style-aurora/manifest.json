@@ -1,0 +1,12 @@
+{
+  "id": "style-aurora",
+  "name": "Aurora Gradient",
+  "description": "Deep navy background with iridescent aurora-inspired accents — purples, greens, and teals. Rich, dreamy dark mode.",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["style", "aurora", "gradient", "dark", "vibrant", "iridescent"],
+  "styleCategory": "aurora",
+  "designPrinciples": ["aurora-color-palette", "deep-dark-substrate", "iridescent-accents", "layered-depth", "natural-gradients"],
+  "components": [],
+  "layouts": []
+}

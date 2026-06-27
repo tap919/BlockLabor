@@ -1,0 +1,3416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>🔮 Megacode</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--bg2:#0f0f1a;--bg3:#14142a;--card:#12121e;
+  --border:#1e1e32;--border2:#2a2a42;
+  --primary:#00d4ff;--primary-dim:rgba(0,212,255,0.1);--primary-glow:rgba(0,212,255,0.3);
+  --secondary:#7c3aed;--secondary-dim:rgba(124,58,237,0.15);
+  --accent:#f59e0b;--success:#10b981;--warning:#f59e0b;--error:#ef4444;
+  --text:#e2e8f0;--text-dim:#94a3b8;--text-muted:#475569;
+  --code-bg:#0d1117;--radius:8px;--radius-lg:12px;
+  --shadow:0 4px 24px rgba(0,0,0,0.5);
+  --glow:0 0 20px rgba(0,212,255,0.3);
+  --sidebar-w:234px;--right-w:264px;--nav-h:54px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:14px;
+  line-height:1.5;overflow:hidden}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
+
+/* ── App Shell ── */
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ── Navbar ── */
+#navbar{
+  height:var(--nav-h);background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;z-index:100
+}
+.brand{font-size:18px;font-weight:800;color:var(--primary);
+  letter-spacing:-0.5px;text-shadow:var(--glow);white-space:nowrap;user-select:none}
+.brand sup{font-size:9px;color:var(--text-muted);font-weight:400;letter-spacing:0}
+.nav-divider{width:1px;height:22px;background:var(--border);flex-shrink:0}
+.nav-group{display:flex;flex-direction:column;gap:1px}
+.nav-label{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
+.nav-select{
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  padding:4px 26px 4px 9px;border-radius:var(--radius);font-size:12px;
+  cursor:pointer;appearance:none;min-width:110px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2394a3b8' d='M5 6L0 0h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+  transition:border-color 0.2s
+}
+.nav-select:hover,.nav-select:focus{border-color:var(--primary);outline:none}
+.nav-select option{background:var(--bg2)}
+.nav-spacer{flex:1}
+.nav-btn{
+  background:var(--card);border:1px solid var(--border);color:var(--text-dim);
+  padding:5px 11px;border-radius:var(--radius);font-size:12px;cursor:pointer;
+  display:flex;align-items:center;gap:5px;transition:all 0.2s;white-space:nowrap;
+  font-family:inherit
+}
+.nav-btn:hover{border-color:var(--primary);color:var(--primary)}
+.nav-btn.active{border-color:var(--primary);color:var(--primary);background:var(--primary-dim)}
+.nav-btn.danger:hover{border-color:var(--error);color:var(--error)}
+#status-pill{
+  display:flex;align-items:center;gap:5px;font-size:11px;
+  color:var(--text-muted);padding:3px 10px;
+  background:var(--card);border:1px solid var(--border);border-radius:20px
+}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
+.dot.ok{background:var(--success);box-shadow:0 0 5px var(--success)}
+.dot.err{background:var(--error)}
+.dot.spin{background:var(--warning);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Layout ── */
+#layout{display:flex;flex:1;overflow:hidden}
+
+/* ── Left Sidebar ── */
+#sidebar{
+  width:var(--sidebar-w);background:var(--bg2);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0
+}
+.sb-section{padding:8px 0 4px}
+.sb-head{
+  padding:0 12px 4px;font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)
+}
+.sb-item{
+  display:flex;align-items:center;gap:8px;padding:6px 12px;
+  cursor:pointer;transition:background 0.12s;user-select:none;
+  border-left:2px solid transparent
+}
+.sb-item:hover{background:var(--bg3)}
+.sb-item.active{background:var(--primary-dim);border-left-color:var(--primary);color:var(--primary)}
+.sb-item.task-active{background:var(--secondary-dim);border-left-color:var(--secondary);color:#a78bfa}
+.si-ico{font-size:13px;width:18px;text-align:center;flex-shrink:0}
+.si-lbl{font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.si-tag{
+  font-size:10px;padding:1px 6px;border-radius:8px;
+  background:var(--border);color:var(--text-muted);flex-shrink:0
+}
+.si-tag.ok{background:rgba(16,185,129,.15);color:var(--success)}
+.si-tag.err{background:rgba(239,68,68,.15);color:var(--error)}
+.pdot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
+.pdot.ok{background:var(--success)}
+.pdot.err{background:var(--error)}
+.pdot.spin{background:var(--warning);animation:blink 1s infinite}
+.sb-toggle{
+  display:flex;align-items:center;gap:8px;padding:6px 12px;
+  user-select:none
+}
+.toggle{
+  position:relative;width:32px;height:17px;flex-shrink:0;cursor:pointer
+}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{
+  position:absolute;inset:0;background:var(--border2);border-radius:17px;
+  transition:background 0.2s;cursor:pointer
+}
+.toggle-slider::before{
+  content:'';position:absolute;width:13px;height:13px;
+  left:2px;bottom:2px;background:var(--text-muted);border-radius:50%;
+  transition:transform 0.2s,background 0.2s
+}
+.toggle input:checked+.toggle-slider{background:var(--primary)}
+.toggle input:checked+.toggle-slider::before{transform:translateX(15px);background:#fff}
+.toggle-lbl{font-size:11px;color:var(--text-dim);flex:1}
+.sb-sep{height:1px;background:var(--border);margin:6px 0}
+.flow-nav{display:flex;flex-direction:column;padding:6px 0}
+.flow-step{
+  display:flex;gap:10px;align-items:flex-start;padding:10px 12px;cursor:pointer;
+  border-left:2px solid transparent;transition:background .15s,border-color .15s
+}
+.flow-step:hover{background:var(--bg3)}
+.flow-step.active{background:linear-gradient(90deg,var(--primary-dim),transparent);border-left-color:var(--primary)}
+.flow-step-num{
+  width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:var(--card);border:1px solid var(--border2);font-size:11px;color:var(--text-dim);flex-shrink:0
+}
+.flow-step.active .flow-step-num{background:var(--primary);color:#001018;border-color:var(--primary)}
+.flow-step-copy{min-width:0;flex:1}
+.flow-step-name{font-size:12px;font-weight:600;color:var(--text)}
+.flow-step-help{font-size:10px;color:var(--text-muted);margin-top:2px;line-height:1.4}
+.workspace-pill{
+  margin:10px 12px 4px;padding:10px 12px;background:linear-gradient(180deg,rgba(0,212,255,.09),rgba(255,255,255,.02));
+  border:1px solid rgba(0,212,255,.15);border-radius:var(--radius-lg)
+}
+.workspace-pill .wk-label{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted)}
+.workspace-pill .wk-name{font-size:12px;font-weight:600;color:var(--text);margin-top:5px;word-break:break-word}
+
+/* ── Chat Area ── */
+#chat-wrap{display:flex;flex-direction:column;flex:1;overflow:hidden;min-width:0}
+#msgs{
+  flex:1;overflow-y:auto;padding:18px 20px;
+  display:flex;flex-direction:column;gap:16px
+}
+.msg{display:flex;gap:11px;animation:fadeUp .2s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg-avatar{
+  width:30px;height:30px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;margin-top:1px;
+}
+.msg.user .msg-avatar{background:var(--secondary);color:#fff}
+.msg.assistant .msg-avatar{background:var(--primary-dim);border:1px solid var(--primary);color:var(--primary)}
+.msg.system-msg .msg-avatar{background:var(--bg3);border:1px solid var(--border);color:var(--text-muted)}
+.msg-body{flex:1;min-width:0}
+.msg-meta{display:flex;align-items:center;gap:7px;margin-bottom:4px;flex-wrap:wrap}
+.msg-name{font-size:12px;font-weight:600}
+.msg.user .msg-name{color:var(--text-dim)}
+.msg.assistant .msg-name{color:var(--primary)}
+.msg.system-msg .msg-name{color:var(--text-muted)}
+.msg-time{font-size:10px;color:var(--text-muted)}
+.msg-badge{
+  font-size:10px;padding:1px 7px;border-radius:8px;
+  background:var(--secondary-dim);color:#a78bfa;border:1px solid rgba(124,58,237,.2)
+}
+.msg-badge.provider{background:var(--primary-dim);color:var(--primary);border-color:rgba(0,212,255,.2)}
+.msg-content{color:var(--text);word-break:break-word;line-height:1.65}
+.msg-content p{margin-bottom:8px}
+.msg-content p:last-child{margin-bottom:0}
+.msg-content ul,.msg-content ol{margin:6px 0 8px 18px}
+.msg-content li{margin-bottom:3px}
+.msg-content strong{color:#fff;font-weight:600}
+.msg-content em{color:var(--text-dim);font-style:italic}
+.msg-content h1,.msg-content h2,.msg-content h3{
+  color:#fff;margin:12px 0 6px;font-weight:600
+}
+.msg-content h1{font-size:17px}
+.msg-content h2{font-size:15px}
+.msg-content h3{font-size:13px}
+.msg-content a{color:var(--primary);text-decoration:none}
+.msg-content a:hover{text-decoration:underline}
+.msg-content hr{border:none;border-top:1px solid var(--border);margin:10px 0}
+.inline-code{
+  background:var(--code-bg);border:1px solid var(--border2);
+  padding:1px 5px;border-radius:4px;font-family:'Cascadia Code','Fira Code',monospace;
+  font-size:12px;color:#e879f9
+}
+
+/* Code blocks */
+.code-block{
+  background:var(--code-bg);border:1px solid var(--border);
+  border-radius:var(--radius);margin:8px 0;overflow:hidden
+}
+.code-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 12px;background:rgba(255,255,255,.03);
+  border-bottom:1px solid var(--border)
+}
+.code-lang{font-size:11px;color:var(--text-muted);font-family:monospace}
+.code-actions{display:flex;gap:6px}
+.code-btn{
+  background:transparent;border:1px solid var(--border);color:var(--text-muted);
+  padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;
+  font-family:inherit;transition:all 0.15s
+}
+.code-btn:hover{border-color:var(--primary);color:var(--primary)}
+.code-body{padding:12px 14px;overflow-x:auto}
+.code-body pre{
+  font-family:'Cascadia Code','Fira Code',Consolas,monospace;
+  font-size:12.5px;line-height:1.6;color:#e2e8f0;white-space:pre;
+  margin:0
+}
+.quality-bar{
+  display:flex;align-items:center;gap:8px;padding:5px 12px;
+  background:rgba(0,0,0,.2);border-top:1px solid var(--border);flex-wrap:wrap
+}
+.q-score{
+  font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px
+}
+.q-score.great{background:rgba(16,185,129,.2);color:var(--success)}
+.q-score.ok{background:rgba(245,158,11,.2);color:var(--warning)}
+.q-score.bad{background:rgba(239,68,68,.2);color:var(--error)}
+.q-issues{font-size:10px;color:var(--text-muted);flex:1}
+.q-issue-item{margin-left:8px}
+.q-issue-item.error{color:var(--error)}
+.q-issue-item.warning{color:var(--warning)}
+.q-issue-item.info{color:var(--text-muted)}
+
+/* Typing indicator */
+.typing-wrap{display:flex;gap:11px;align-items:flex-start}
+.typing-dots{display:flex;gap:4px;padding:10px 0}
+.typing-dots span{
+  width:6px;height:6px;background:var(--primary);border-radius:50%;
+  animation:bounce .8s infinite
+}
+.typing-dots span:nth-child(2){animation-delay:.15s}
+.typing-dots span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
+
+/* Welcome screen */
+#welcome{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:20px;padding:40px;text-align:center
+}
+.welcome-icon{font-size:64px;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.welcome-title{font-size:26px;font-weight:800;color:var(--primary);text-shadow:var(--glow)}
+.welcome-sub{font-size:14px;color:var(--text-dim);max-width:500px}
+.quick-prompts{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:600px}
+.qp{
+  background:var(--card);border:1px solid var(--border);
+  padding:7px 14px;border-radius:20px;font-size:12px;cursor:pointer;
+  color:var(--text-dim);transition:all 0.2s
+}
+.qp:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-dim)}
+
+/* ── Input Bar ── */
+#input-bar{
+  background:var(--bg2);border-top:1px solid var(--border);
+  padding:12px 16px;flex-shrink:0
+}
+.input-row{display:flex;gap:8px;align-items:flex-end}
+#input-wrap{
+  flex:1;background:var(--card);border:1px solid var(--border2);
+  border-radius:var(--radius-lg);transition:border-color 0.2s;overflow:hidden
+}
+#input-wrap:focus-within{border-color:var(--primary)}
+#msg-input{
+  width:100%;background:transparent;border:none;color:var(--text);
+  padding:10px 14px;font-size:13.5px;font-family:inherit;resize:none;
+  min-height:44px;max-height:180px;display:block;line-height:1.5;outline:none
+}
+#msg-input::placeholder{color:var(--text-muted)}
+.input-footer{
+  display:flex;align-items:center;gap:8px;padding:5px 10px;
+  border-top:1px solid var(--border)
+}
+.input-badge{
+  font-size:10px;padding:2px 8px;border-radius:8px;
+  background:var(--border);color:var(--text-muted)
+}
+.input-badge.task{background:var(--secondary-dim);color:#a78bfa}
+.input-spacer{flex:1}
+.char-count{font-size:10px;color:var(--text-muted)}
+#send-btn{
+  background:var(--primary);color:#000;border:none;
+  padding:10px 18px;border-radius:var(--radius-lg);font-size:13px;font-weight:700;
+  cursor:pointer;transition:all 0.2s;font-family:inherit;
+  display:flex;align-items:center;gap:6px;flex-shrink:0;height:44px
+}
+#send-btn:hover{background:#00bbde;box-shadow:var(--glow)}
+#send-btn:disabled{background:var(--border2);color:var(--text-muted);cursor:not-allowed;box-shadow:none}
+#stop-btn{
+  background:var(--error);color:#fff;border:none;
+  padding:10px 18px;border-radius:var(--radius-lg);font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;display:none;align-items:center;gap:6px;flex-shrink:0;height:44px
+}
+#stop-btn.show{display:flex}
+
+/* ── Right Panel ── */
+#right-panel{
+  width:var(--right-w);background:var(--bg2);
+  border-left:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0
+}
+.rp-section{padding:10px 0;border-bottom:1px solid var(--border)}
+.rp-head{
+  padding:0 12px 7px;font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)
+}
+.rp-body{padding:0 12px}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:9px 11px
+}
+.stat-card .sv{font-size:20px;font-weight:800;color:var(--primary)}
+.stat-card .sk{font-size:10px;color:var(--text-muted);margin-top:1px}
+.info-row{display:flex;justify-content:space-between;align-items:center;
+  padding:4px 0;border-bottom:1px solid var(--border)}
+.info-row:last-child{border-bottom:none}
+.info-key{font-size:11px;color:var(--text-muted)}
+.info-val{font-size:11px;color:var(--text);font-weight:500;text-align:right;max-width:120px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.info-val.ok{color:var(--success)}
+.info-val.err{color:var(--error)}
+.info-val.warn{color:var(--warning)}
+.quality-widget{padding:8px 0}
+.quality-circle-wrap{display:flex;justify-content:center;margin-bottom:10px}
+.quality-circle{
+  width:72px;height:72px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border:3px solid var(--border2);font-weight:800
+}
+.quality-circle.great{border-color:var(--success);color:var(--success)}
+.quality-circle.ok{border-color:var(--warning);color:var(--warning)}
+.quality-circle.bad{border-color:var(--error);color:var(--error)}
+.quality-circle .qc-num{font-size:22px}
+.quality-circle .qc-lbl{font-size:9px;color:var(--text-muted)}
+.issue-list{list-style:none}
+.issue-list li{
+  font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);
+  display:flex;gap:5px;align-items:flex-start
+}
+.issue-list li:last-child{border-bottom:none}
+.issue-sev{font-size:9px;padding:1px 5px;border-radius:4px;flex-shrink:0;margin-top:1px}
+.issue-sev.error{background:rgba(239,68,68,.2);color:var(--error)}
+.issue-sev.warning{background:rgba(245,158,11,.2);color:var(--warning)}
+.issue-sev.info{background:rgba(148,163,184,.2);color:var(--text-muted)}
+.feature-btn{
+  width:100%;background:var(--card);border:1px solid var(--border);
+  color:var(--text-dim);padding:7px 11px;border-radius:var(--radius);
+  font-size:12px;cursor:pointer;text-align:left;font-family:inherit;
+  display:flex;align-items:center;gap:6px;transition:all 0.15s;margin-bottom:5px
+}
+.feature-btn:hover{border-color:var(--primary);color:var(--primary)}
+.feature-btn:last-child{margin-bottom:0}
+.flow-detail{display:none;padding:10px 0;border-bottom:1px solid var(--border)}
+.flow-detail.active{display:block}
+.flow-title{padding:0 12px 8px;font-size:14px;font-weight:700;color:var(--text)}
+.flow-copy{padding:0 12px 10px;font-size:11px;color:var(--text-dim);line-height:1.5}
+.flow-actions{padding:0 12px 10px;display:flex;gap:6px;flex-wrap:wrap}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.settings-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+.settings-card h4{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);margin-bottom:10px}
+.settings-note{font-size:11px;color:var(--text-dim);line-height:1.5}
+.settings-inline{display:flex;gap:8px;align-items:center}
+.input-sub{font-size:10px;color:var(--text-muted);margin-top:5px}
+
+/* ── Modals ── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+  z-index:200;align-items:center;justify-content:center
+}
+.modal-overlay.show{display:flex}
+.modal{
+  background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-lg);
+  width:90%;max-width:520px;max-height:80vh;overflow:hidden;
+  display:flex;flex-direction:column;box-shadow:var(--shadow);animation:slideUp .2s ease
+}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.modal-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--border)
+}
+.modal-title{font-size:15px;font-weight:700;color:var(--text)}
+.modal-close{
+  background:transparent;border:none;color:var(--text-muted);
+  font-size:18px;cursor:pointer;padding:2px 6px;border-radius:4px;
+  transition:color 0.15s;line-height:1
+}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:18px;overflow-y:auto;flex:1}
+.modal-input{
+  width:100%;background:var(--card);border:1px solid var(--border2);
+  color:var(--text);padding:9px 12px;border-radius:var(--radius);
+  font-size:13px;font-family:inherit;outline:none;transition:border-color 0.2s;margin-bottom:10px
+}
+.modal-input:focus{border-color:var(--primary)}
+.modal-btn{
+  background:var(--primary);color:#000;border:none;
+  padding:9px 18px;border-radius:var(--radius);font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;transition:background 0.2s
+}
+.modal-btn:hover{background:#00bbde}
+.modal-btn.sec{background:var(--card);color:var(--text-dim);border:1px solid var(--border)}
+.modal-btn.sec:hover{border-color:var(--primary);color:var(--primary)}
+.result-box{
+  background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px;font-size:12px;color:var(--text);white-space:pre-wrap;
+  font-family:monospace;max-height:260px;overflow-y:auto;margin-top:10px
+}
+.result-row{display:flex;justify-content:space-between;padding:5px 0;
+  border-bottom:1px solid var(--border)}
+.result-row:last-child{border-bottom:none}
+.result-key{font-size:11px;color:var(--text-muted)}
+.result-val{font-size:11px;color:var(--text);font-weight:500}
+.result-val.ok{color:var(--success)}
+.result-val.warn{color:var(--warning)}
+.result-val.err{color:var(--error)}
+.scaffold-tree{font-family:monospace;font-size:12px;line-height:1.7;color:var(--text)}
+.scaffold-tree .dir{color:var(--primary)}
+.scaffold-tree .file{color:var(--text-dim)}
+
+/* ── Toast ── */
+#toast-wrap{
+  position:fixed;bottom:20px;right:20px;z-index:300;
+  display:flex;flex-direction:column;gap:8px
+}
+.toast{
+  background:var(--bg2);border:1px solid var(--border2);
+  padding:10px 16px;border-radius:var(--radius);font-size:12px;
+  color:var(--text);box-shadow:var(--shadow);
+  animation:slideIn .2s ease;min-width:200px
+}
+.toast.ok{border-left:3px solid var(--success)}
+.toast.err{border-left:3px solid var(--error)}
+.toast.warn{border-left:3px solid var(--warning)}
+@keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+/* ── Misc ── */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:30px;gap:10px;color:var(--text-muted);font-size:12px;text-align:center
+}
+.empty-state .ei{font-size:36px;margin-bottom:4px}
+.tag{font-size:10px;padding:2px 7px;border-radius:8px;background:var(--border);color:var(--text-muted)}
+.tag.primary{background:var(--primary-dim);color:var(--primary)}
+.tag.sec{background:var(--secondary-dim);color:#a78bfa}
+.divider{height:1px;background:var(--border);margin:8px 0}
+button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+/* ═══════════ IDE LAYOUT ═══════════ */
+
+/* ── View Mode Tabs ── */
+#view-tabs{display:flex;gap:0;flex-shrink:0}
+.view-tab{
+  background:var(--card);border:1px solid var(--border);border-bottom:none;
+  color:var(--text-dim);padding:5px 14px;font-size:12px;cursor:pointer;
+  font-family:inherit;transition:all 0.15s;border-radius:var(--radius) var(--radius) 0 0;
+  margin-right:-1px
+}
+.view-tab:hover{color:var(--primary)}
+.view-tab.active{background:var(--bg2);color:var(--primary);border-color:var(--primary);
+  border-bottom:1px solid var(--bg2);position:relative;z-index:1}
+
+/* ── Center area: editor + chat ── */
+#center-area{display:flex;flex-direction:column;flex:1;overflow:hidden;min-width:0}
+
+/* ── Editor / Chat panel toggle ── */
+#editor-panel{display:none;flex-direction:column;flex:1;overflow:hidden;min-width:0}
+#editor-panel.show{display:flex}
+#chat-wrap.hide{display:none}
+
+/* ── File Tabs (editor) ── */
+#file-tabs{
+  display:flex;gap:0;background:var(--bg);border-bottom:1px solid var(--border);
+  overflow-x:auto;flex-shrink:0;min-height:32px
+}
+.file-tab{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 12px;font-size:11px;color:var(--text-dim);
+  cursor:pointer;border-right:1px solid var(--border);
+  background:var(--bg);transition:all 0.12s;white-space:nowrap;flex-shrink:0;
+  user-select:none
+}
+.file-tab:hover{background:var(--bg2);color:var(--text)}
+.file-tab.active{background:var(--bg2);color:var(--primary);border-bottom:2px solid var(--primary)}
+.file-tab .close-tab{
+  font-size:13px;color:var(--text-muted);cursor:pointer;padding:0 2px;
+  border-radius:3px;line-height:1
+}
+.file-tab .close-tab:hover{background:var(--border2);color:var(--error)}
+.file-tab .modified{color:var(--warning);font-size:9px;margin-left:2px}
+
+/* ── Monaco Editor Container ── */
+#monaco-container{flex:1;overflow:hidden;background:var(--code-bg)}
+
+/* ── Editor Status Bar ── */
+#editor-status-bar{
+  display:flex;align-items:center;gap:12px;
+  padding:3px 12px;background:var(--bg);border-top:1px solid var(--border);
+  font-size:11px;color:var(--text-muted);flex-shrink:0
+}
+#editor-status-bar .spacer{flex:1}
+
+/* ── File Tree (replaces left sidebar in IDE mode) ── */
+#file-tree-panel{display:none;flex-direction:column;width:var(--sidebar-w);
+  background:var(--bg2);border-right:1px solid var(--border);overflow:hidden;flex-shrink:0}
+#file-tree-panel.show{display:flex}
+
+#file-tree-header{
+  display:flex;align-items:center;gap:6px;padding:8px 10px;
+  border-bottom:1px solid var(--border);flex-shrink:0
+}
+#file-tree-header .ft-title{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.8px;color:var(--text-muted);flex:1;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.ft-btn{
+  background:transparent;border:none;color:var(--text-muted);
+  cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px;transition:color 0.12s
+}
+.ft-btn:hover{color:var(--primary)}
+
+#file-tree-search{
+  padding:4px 10px;border-bottom:1px solid var(--border);flex-shrink:0
+}
+#file-tree-search input{
+  width:100%;background:var(--card);border:1px solid var(--border);
+  color:var(--text);padding:4px 8px;border-radius:4px;font-size:11px;
+  outline:none;font-family:inherit
+}
+#file-tree-search input:focus{border-color:var(--primary)}
+
+#file-tree{flex:1;overflow-y:auto;padding:4px 0;font-size:12px}
+
+.tree-item{
+  display:flex;align-items:center;gap:4px;padding:3px 8px;
+  cursor:pointer;transition:background 0.08s;user-select:none;white-space:nowrap;
+  border-left:2px solid transparent
+}
+.tree-item:hover{background:var(--bg3)}
+.tree-item.active{background:var(--primary-dim);border-left-color:var(--primary);color:var(--primary)}
+.tree-item .arrow{width:14px;text-align:center;font-size:10px;color:var(--text-muted);flex-shrink:0;transition:transform 0.12s}
+.tree-item .arrow.open{transform:rotate(90deg)}
+.tree-item .arrow.hidden{visibility:hidden}
+.tree-item .icon{font-size:12px;flex-shrink:0}
+.tree-item .name{flex:1;overflow:hidden;text-overflow:ellipsis}
+
+/* ── Terminal Panel ── */
+#terminal-panel{
+  display:none;flex-direction:column;border-top:1px solid var(--border);
+  background:var(--code-bg);max-height:250px;flex-shrink:0
+}
+#terminal-panel.show{display:flex}
+
+#terminal-header{
+  display:flex;align-items:center;gap:6px;padding:4px 10px;
+  background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0
+}
+#terminal-header .term-title{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.8px;color:var(--text-muted);flex:1}
+#terminal-output{
+  flex:1;overflow-y:auto;padding:8px 12px;
+  font-family:'Cascadia Code','Fira Code',Consolas,monospace;
+  font-size:12px;line-height:1.5;color:var(--text);white-space:pre-wrap;
+  min-height:80px
+}
+#terminal-output .stdout{color:var(--text)}
+#terminal-output .stderr{color:var(--error)}
+#terminal-output .system{color:var(--text-muted);font-style:italic}
+
+#terminal-input-row{
+  display:flex;gap:6px;padding:4px 10px;border-top:1px solid var(--border);
+  background:var(--bg);flex-shrink:0
+}
+#terminal-input{
+  flex:1;background:var(--card);border:1px solid var(--border);
+  color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px;
+  font-family:'Cascadia Code','Fira Code',Consolas,monospace;outline:none
+}
+#terminal-input:focus{border-color:var(--primary)}
+#terminal-run-btn{
+  background:var(--primary);color:#000;border:none;
+  padding:4px 12px;border-radius:4px;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:inherit
+}
+
+/* ── Git Panel (inside right sidebar) ── */
+.git-section{padding:10px 0;border-bottom:1px solid var(--border)}
+.git-file{
+  font-size:11px;padding:3px 0;display:flex;gap:5px;align-items:center;
+  border-bottom:1px solid var(--border)
+}
+.git-file:last-child{border-bottom:none}
+.git-status-badge{
+  font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700;flex-shrink:0;
+  font-family:monospace
+}
+.git-status-badge.modified{background:rgba(245,158,11,.2);color:var(--warning)}
+.git-status-badge.added{background:rgba(16,185,129,.2);color:var(--success)}
+.git-status-badge.deleted{background:rgba(239,68,68,.2);color:var(--error)}
+.git-status-badge.untracked{background:rgba(148,163,184,.2);color:var(--text-muted)}
+
+/* ── Open Folder Modal ── */
+#open-folder-modal .modal{max-width:460px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Navbar ── -->
+  <nav id="navbar">
+    <div class="brand">🔮 Megacode<sup>AI</sup></div>
+    <div class="nav-divider"></div>
+
+    <button class="nav-btn" id="open-folder-btn" title="Open a folder / repo">📂 Open Folder</button>
+    <div class="nav-divider"></div>
+
+    <div id="view-tabs">
+      <button class="view-tab active" data-view="chat" onclick="switchView('chat')">💬 Chat</button>
+      <button class="view-tab" data-view="editor" onclick="switchView('editor')">📝 Editor</button>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-group">
+      <div class="nav-label">Task Mode</div>
+      <select class="nav-select" id="task-select">
+        <option value="auto">⚡ Auto-Detect</option>
+        <option value="daily">⚡ Daily</option>
+        <option value="research">🔬 Research</option>
+        <option value="complex_logic">🧠 Complex Logic</option>
+        <option value="creative">🎨 Creative</option>
+        <option value="templates">📋 Templates</option>
+        <option value="image">🖼️ Image</option>
+        <option value="video">🎬 Video</option>
+        <option value="long_session">🏃 Long Session</option>
+        <option value="the_block">⛓️ The Block</option>
+        <option value="general">🌐 General</option>
+      </select>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <button class="nav-btn" id="terminal-toggle-btn" title="Toggle terminal panel">⬛ Terminal</button>
+    <button class="nav-btn" id="settings-btn" title="Workspace settings">⚙️ Settings</button>
+    <button class="nav-btn danger" id="clear-btn" title="Clear chat">🗑️ Clear</button>
+
+    <div class="nav-divider"></div>
+    <div id="status-pill">
+      <div class="dot spin" id="status-dot"></div>
+      <span id="status-text">Connecting…</span>
+    </div>
+  </nav>
+
+  <!-- ── Main Layout ── -->
+  <div id="layout">
+
+    <!-- ── Left Sidebar (providers, tasks, tools) ── -->
+    <aside id="sidebar">
+
+      <div class="workspace-pill">
+        <div class="wk-label">Workspace</div>
+        <div class="wk-name" id="workspace-flow-name">No folder open</div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-head">Development Flow</div>
+        <div class="flow-nav" id="flow-nav"></div>
+      </div>
+
+    </aside>
+
+    <!-- ── File Tree Panel (shows when a folder is opened) ── -->
+    <div id="file-tree-panel">
+      <div id="file-tree-header">
+        <span class="ft-title" id="workspace-name">No folder open</span>
+        <button class="ft-btn" onclick="refreshFileTree()" title="Refresh">🔄</button>
+        <button class="ft-btn" onclick="createNewFile()" title="New File">📄+</button>
+        <button class="ft-btn" onclick="createNewFolder()" title="New Folder">📁+</button>
+      </div>
+      <div id="file-tree-search">
+        <input type="text" placeholder="Search files…" id="file-search-input" oninput="filterFileTree(this.value)"/>
+      </div>
+      <div id="file-tree"></div>
+    </div>
+
+    <!-- ── Center: Chat + Editor + Terminal stacked ── -->
+    <div id="center-area">
+
+      <!-- ── Chat Area (default view) ── -->
+      <div id="chat-wrap">
+        <div id="msgs">
+          <div id="welcome">
+            <div class="welcome-icon">🔮</div>
+            <div class="welcome-title">Welcome to Megacode</div>
+            <div class="welcome-sub">Full-stack AI coding tool with multi-LLM routing, code editor, terminal, git integration, and vibe coding safety features.</div>
+            <div class="quick-prompts" id="quick-prompts">
+              <div class="qp" onclick="quickSend('Explain how the LLM router works in this project')">🔬 Explain LLM router</div>
+              <div class="qp" onclick="quickSend('Review this TypeScript code for issues:\n\nconst getData = async () => {\n  try {\n    const res = await fetch(\"/api\")\n    return res.json()\n  } catch(e) {}\n}')">🧠 Review code</div>
+              <div class="qp" onclick="quickSend('Design a dark-themed dashboard UI for a coding assistant')">🎨 Design a dashboard UI</div>
+              <div class="qp" onclick="quickSend('Create a React + TypeScript project template with Tailwind and Vite')">📋 React + TS template</div>
+              <div class="qp" onclick="quickSend('What is a WebSocket and how does it differ from HTTP?')">📖 Explain WebSockets</div>
+              <div class="qp" onclick="quickSend('Write a comprehensive guide to blockchain smart contracts')">⛓️ Blockchain guide</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Input Bar -->
+        <div id="input-bar">
+          <div class="input-row">
+            <div id="input-wrap">
+              <textarea id="msg-input" rows="1" placeholder="Ask Megacode anything… (Enter to send, Shift+Enter for newline)"></textarea>
+              <div class="input-footer">
+                <span class="input-badge task" id="detected-task-badge">⚡ Auto</span>
+                <span class="input-badge" id="provider-badge">No provider</span>
+                <div class="input-spacer"></div>
+                <span class="char-count" id="char-count">0</span>
+              </div>
+            </div>
+            <button id="send-btn">Send ▶</button>
+            <button id="stop-btn">⏹ Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Editor Panel (shown when switching to editor view) ── -->
+      <div id="editor-panel">
+        <div id="file-tabs"></div>
+        <div id="monaco-container">
+          <div class="empty-state" style="height:100%">
+            <div class="ei">📝</div>
+            <div>Open a file from the file tree to start editing</div>
+            <div style="font-size:11px;color:var(--text-muted)">Or use 📂 Open Folder to load a project</div>
+          </div>
+        </div>
+        <div id="editor-status-bar">
+          <span id="editor-lang">Plaintext</span>
+          <span id="editor-cursor">Ln 1, Col 1</span>
+          <span class="spacer"></span>
+          <span id="editor-file-path">No file open</span>
+          <button class="ft-btn" onclick="saveCurrentFile()" title="Save (Ctrl+S)">💾 Save</button>
+        </div>
+      </div>
+
+      <!-- ── Terminal Panel (toggled) ── -->
+      <div id="terminal-panel">
+        <div id="terminal-header">
+          <span class="term-title">⬛ Terminal</span>
+          <button class="ft-btn" onclick="clearTerminal()" title="Clear">🗑️</button>
+          <button class="ft-btn" onclick="toggleTerminal()" title="Close">✕</button>
+        </div>
+        <div id="terminal-output"><span class="system">Terminal ready. Type a command below.</span>
+</div>
+        <div id="terminal-input-row">
+          <span style="color:var(--primary);font-size:12px;font-family:monospace;flex-shrink:0">$</span>
+          <input type="text" id="terminal-input" placeholder="Enter command…" autocomplete="off"/>
+          <button id="terminal-run-btn" onclick="runTerminalCommand()">Run</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Right Panel ── -->
+    <aside id="right-panel">
+
+      <div class="rp-section">
+        <div class="rp-head">Current Step</div>
+        <div class="rp-body">
+          <div id="flow-detail-panel"></div>
+        </div>
+      </div>
+
+      <div class="rp-section">
+        <div class="rp-head">Last Code Quality</div>
+        <div class="rp-body">
+          <div class="quality-widget" id="quality-widget">
+            <div class="empty-state"><div class="ei">📊</div>No code scored yet</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rp-section" style="border-bottom:none">
+        <div class="rp-head">Git</div>
+        <div class="rp-body" id="git-panel">
+          <div class="empty-state" style="padding:12px"><div class="ei" style="font-size:24px">⑂</div>Open a folder to see git status</div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+</div>
+
+<!-- ════════════ MODALS ════════════ -->
+
+<!-- Health Check Modal -->
+<div class="modal-overlay" id="health-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🏥 Provider Health Check</span>
+      <button class="modal-close" onclick="closeModal('health-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="health-results"><div class="empty-state"><div class="ei">🏥</div>Running health check…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Glossary Modal -->
+<div class="modal-overlay" id="gloss-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📖 Plain Language Glossary</span>
+      <button class="modal-close" onclick="closeModal('gloss-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input class="modal-input" id="gloss-input" placeholder="Enter a technical term (e.g. api, promise, webhook)…"/>
+      <button class="modal-btn" onclick="lookupGlossary()">Look Up</button>
+      <div id="gloss-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scaffold Modal -->
+<div class="modal-overlay" id="scaffold-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🏗️ Smart Scaffolder</span>
+      <button class="modal-close" onclick="closeModal('scaffold-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input class="modal-input" id="scaffold-input" placeholder="Describe your project (e.g. Express REST API with auth)…"/>
+      <button class="modal-btn" onclick="runScaffold()">Generate Structure</button>
+      <div id="scaffold-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Dependency Advisor Modal -->
+<div class="modal-overlay" id="dep-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🔍 Dependency Advisor</span>
+      <button class="modal-close" onclick="closeModal('dep-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input class="modal-input" id="dep-input" placeholder="Package name (e.g. lodash)…"/>
+      <input class="modal-input" id="dep-ver-input" placeholder="Version (optional, e.g. 4.17.21)"/>
+      <button class="modal-btn" onclick="checkDep()">Check Package</button>
+      <div id="dep-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Error Explainer Modal -->
+<div class="modal-overlay" id="error-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🚨 Plain English Error Explainer</span>
+      <button class="modal-close" onclick="closeModal('error-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <textarea class="modal-input" id="error-input" rows="4" placeholder="Paste your error message here…" style="resize:vertical"></textarea>
+      <button class="modal-btn" onclick="explainError()">Explain Error</button>
+      <div id="error-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Code Score Modal -->
+<div class="modal-overlay" id="score-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📊 Code Quality Scorer</span>
+      <button class="modal-close" onclick="closeModal('score-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <textarea class="modal-input" id="score-input" rows="8" placeholder="Paste your code here…" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+      <button class="modal-btn" onclick="scoreCode()">Score Code</button>
+      <div id="score-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Safe Mode Modal -->
+<div class="modal-overlay" id="safe-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🛡️ Operation Safety Check</span>
+      <button class="modal-close" onclick="closeModal('safe-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input class="modal-input" id="safe-input" placeholder="Enter an operation (e.g. rm -rf /tmp, DROP TABLE users)…"/>
+      <button class="modal-btn" onclick="checkSafe()">Check Safety</button>
+      <div id="safe-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Undo/Redo Modal -->
+<div class="modal-overlay" id="undo-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">↩️ Undo / Redo Stack</span>
+      <button class="modal-close" onclick="closeModal('undo-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">The undo stack tracks all AI-generated code edits in this session. Use it to step back through changes.</p>
+      <div id="undo-stack-list"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="modal-btn" onclick="undoAction()">↩️ Undo</button>
+        <button class="modal-btn sec" onclick="redoAction()">↪️ Redo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Project Assessment Modal -->
+<div class="modal-overlay" id="assessment-modal">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <span class="modal-title">🔍 Project Assessment</span>
+      <button class="modal-close" onclick="closeModal('assessment-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Run a comprehensive assessment of the current project to identify issues and generate recommendations.</p>
+      <div id="assessment-result">
+        <div style="text-align:center;padding:30px;color:var(--text-muted)">
+          <div style="font-size:48px;margin-bottom:10px">🔍</div>
+          <div>No assessment run yet</div>
+          <div style="font-size:11px;margin-top:5px">Click "Run Assessment" to analyze the project</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="modal-btn" onclick="runProjectAssessment()">Run Assessment</button>
+        <button class="modal-btn sec" onclick="viewWorkflowSequence()">View Workflow</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Workflow Sequence Modal -->
+<div class="modal-overlay" id="workflow-modal">
+  <div class="modal" style="max-width:800px">
+    <div class="modal-header">
+      <span class="modal-title">📋 Full-Stack Workflow Sequence</span>
+      <button class="modal-close" onclick="closeModal('workflow-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Follow this sequence for complete full-stack development with all MCP tools.</p>
+      <div id="workflow-sequence-list"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="modal-btn" onclick="executeCurrentWorkflowStep()">Execute Current Step</button>
+        <button class="modal-btn sec" onclick="loadWorkflowSequence()">Refresh</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MCP Status Modal -->
+<div class="modal-overlay" id="mcp-status-modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <span class="modal-title">🔌 MCP Server Status</span>
+      <button class="modal-close" onclick="closeModal('mcp-status-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Status of all MCP servers in the full-stack system.</p>
+      <div id="mcp-status-list">
+        <div style="text-align:center;padding:20px;color:var(--text-muted)">
+          <div style="font-size:32px;margin-bottom:10px">⏳</div>
+          <div>Loading MCP status...</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="modal-btn" onclick="loadMCPStatus()">Refresh Status</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Open Folder Modal -->
+<div class="modal-overlay" id="open-folder-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📂 Open Folder / Repository</span>
+      <button class="modal-close" onclick="closeModal('open-folder-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Enter the full path to a folder on the server machine to open it as a workspace.</p>
+      <input class="modal-input" id="folder-path-input" placeholder="C:\Users\You\Projects\my-app or /home/user/project"/>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="modal-btn" onclick="openWorkspace()">Open Folder</button>
+        <button class="modal-btn sec" onclick="openWorkspaceDefault()">Open Project Root</button>
+      </div>
+      <div id="folder-result" style="margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Git Commit Modal -->
+<div class="modal-overlay" id="git-commit-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">⑂ Git Commit</span>
+      <button class="modal-close" onclick="closeModal('git-commit-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input class="modal-input" id="commit-msg-input" placeholder="Commit message…"/>
+      <div style="display:flex;gap:8px">
+        <button class="modal-btn" onclick="gitCommit()">Commit All</button>
+        <button class="modal-btn sec" onclick="gitPush()">Push</button>
+        <button class="modal-btn sec" onclick="gitPull()">Pull</button>
+      </div>
+      <div id="git-commit-result" style="margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Tools Modal -->
+<div class="modal-overlay" id="tools-modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <span class="modal-title">🛠️ MCP / IDE Tools</span>
+      <button class="modal-close" onclick="closeModal('tools-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input class="modal-input" id="tools-search" placeholder="Search tools…" style="flex:1" oninput="filterTools(this.value)"/>
+        <button class="modal-btn" onclick="refreshTools()">🔄</button>
+      </div>
+      <div id="tools-list" style="max-height:300px;overflow-y:auto"></div>
+      <div id="tool-exec-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <span class="modal-title">⚙️ Workspace Settings</span>
+      <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-grid">
+        <div class="settings-card">
+          <h4>DeepSeek</h4>
+          <input class="modal-input" id="deepseek-api-input" placeholder="Paste DeepSeek API key" style="margin-bottom:6px"/>
+          <div class="settings-inline" style="margin-bottom:6px">
+            <button class="modal-btn" onclick="saveDeepSeekKey()">Save Key</button>
+            <span class="tag primary" id="deepseek-key-status">Not configured</span>
+          </div>
+          <div class="input-sub">Saved in runtime settings for this server session and used to rebuild provider routing.</div>
+        </div>
+
+        <div class="settings-card">
+          <h4>Experience Toggles</h4>
+          <div class="sb-toggle">
+            <label class="toggle"><input type="checkbox" id="t-safemode" checked/><span class="toggle-slider"></span></label>
+            <span class="toggle-lbl">Safe Mode</span>
+          </div>
+          <div class="sb-toggle">
+            <label class="toggle"><input type="checkbox" id="t-autoexplain"/><span class="toggle-slider"></span></label>
+            <span class="toggle-lbl">Auto-Explain</span>
+          </div>
+          <div class="sb-toggle">
+            <label class="toggle"><input type="checkbox" id="t-rookie"/><span class="toggle-slider"></span></label>
+            <span class="toggle-lbl">Rookie Mode</span>
+          </div>
+          <div class="sb-toggle">
+            <label class="toggle"><input type="checkbox" id="t-quality" checked/><span class="toggle-slider"></span></label>
+            <span class="toggle-lbl">Quality Score</span>
+          </div>
+          <div class="sb-toggle">
+            <label class="toggle"><input type="checkbox" id="t-intent"/><span class="toggle-slider"></span></label>
+            <span class="toggle-lbl">Intent Validator</span>
+          </div>
+          <div class="sb-toggle">
+            <label class="toggle"><input type="checkbox" id="t-confidence"/><span class="toggle-slider"></span></label>
+            <span class="toggle-lbl">Confidence Score</span>
+          </div>
+        </div>
+      </div>
+      <div id="settings-feedback" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-wrap"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const DEFAULT_WORKSPACE_ROOT = window.location.origin.includes('localhost') 
+  ? 'C:\\Users\\User\\Desktop\\Tools\\StreetCode\\products\\Megacode-main'
+  : '/';
+
+const state = {
+  msgs: [],          // {role,content,meta}
+  sessionMsgs: 0,
+  sessionTokens: 0,
+  streaming: false,
+  abortCtrl: null,
+  providers: [],
+  taskTypes: [],
+  lastQuality: null,
+  undoStack: [],
+  undoPtr: -1,
+  selectedTask: 'auto',
+  lastProvider: null,
+  lastModel: null,
+  lastTaskType: null,
+  lastResponseMs: null,
+  respStart: null,
+  selectedFlowStep: 'assess',
+  settings: {
+    hasDeepSeekKey: false,
+    keyStatus: {},
+  },
+};
+
+const FLOW_STEPS = [
+  { id:'assess', label:'Assess', helper:'Inspect the repo and surface issues before changing code.' },
+  { id:'plan', label:'Plan', helper:'Pick task routing and workflow before execution.' },
+  { id:'design', label:'Design', helper:'Use glossary, scaffolding, and UI direction when shaping work.' },
+  { id:'build', label:'Build', helper:'Chat, editor, and file tools for implementation.' },
+  { id:'verify', label:'Verify', helper:'Quality checks, dependency review, and safety checks.' },
+  { id:'integrate', label:'Integrate', helper:'MCP tools and workflow execution for end-to-end work.' },
+  { id:'ship', label:'Ship', helper:'Git actions and packaging for handoff.' },
+  { id:'settings', label:'Settings', helper:'Provider keys and interface behavior live here.' },
+];
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  initUI();
+  loadStatus();
+  loadTaskTypes();
+  setupInput();
+  renderFlowNav();
+  renderFlowDetail();
+  // Initialize Monaco lazily - don't load until needed
+  // initMonaco() will be called when user switches to editor view
+});
+
+function initUI() {
+  document.getElementById('task-select').addEventListener('change', e => {
+    state.selectedTask = e.target.value;
+    updateDetectedBadge();
+  });
+  document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
+  document.getElementById('clear-btn').addEventListener('click', clearChat);
+  document.getElementById('send-btn').addEventListener('click', sendMessage);
+  document.getElementById('stop-btn').addEventListener('click', stopStream);
+  // Close modals on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('click', e => { if(e.target===el) el.classList.remove('show'); });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// STATUS + PROVIDERS
+// ═══════════════════════════════════════════════════════════
+async function loadStatus() {
+  setStatus('spin','Connecting…');
+  try {
+    const r = await fetch('/api/status');
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d = await r.json();
+    state.providers = d.providers || [];
+    state.settings.keyStatus = d.keyStatus || {};
+    state.settings.hasDeepSeekKey = !!(d.keyStatus && d.keyStatus.deepseek && d.keyStatus.deepseek.available);
+    renderProviderList(d);
+    renderFlowDetail();
+    setStatus('ok', `${state.providers.length} provider${state.providers.length!==1?'s':''} ready`);
+    const badge = document.getElementById('provider-badge');
+    if(state.providers.length>0) badge.textContent = state.providers[0];
+    else badge.textContent = 'No providers';
+  } catch(e) {
+    setStatus('err','Megacode offline');
+    renderProviderListError(e.message);
+    toast('Could not connect to Megacode server: '+e.message,'err');
+  }
+}
+
+function renderProviderList(d) {
+  return d;
+}
+
+function renderProviderListError(msg) {
+  return msg;
+}
+
+async function loadTaskTypes() {
+  try {
+    const r = await fetch('/api/task-types');
+    if(!r.ok) return;
+    const d = await r.json();
+    state.taskTypes = d.types || [];
+    renderTaskList(d.types);
+  } catch(_) {}
+}
+
+function renderTaskList(types) {
+  return types;
+}
+
+function selectTask(id) {
+  state.selectedTask = id;
+  document.getElementById('task-select').value = id;
+  renderTaskList(state.taskTypes);
+  updateDetectedBadge();
+}
+
+function setStatus(type, text) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'dot '+type;
+  txt.textContent = text;
+}
+
+function renderFlowNav() {
+  const nav = document.getElementById('flow-nav');
+  nav.innerHTML = FLOW_STEPS.map((step, index) => `
+    <div class="flow-step ${state.selectedFlowStep===step.id?'active':''}" onclick="selectFlowStep('${step.id}')">
+      <div class="flow-step-num">${index + 1}</div>
+      <div class="flow-step-copy">
+        <div class="flow-step-name">${escHtml(step.label)}</div>
+        <div class="flow-step-help">${escHtml(step.helper)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectFlowStep(stepId) {
+  state.selectedFlowStep = stepId;
+  renderFlowNav();
+  renderFlowDetail();
+}
+
+function renderFlowDetail() {
+  const panel = document.getElementById('flow-detail-panel');
+  const step = FLOW_STEPS.find(s => s.id === state.selectedFlowStep) || FLOW_STEPS[0];
+  const providerLabel = state.providers.length ? state.providers.join(', ') : 'No providers';
+  const taskLabel = state.selectedTask === 'auto' ? 'Auto detect' : state.selectedTask.replace(/_/g, ' ');
+
+  const sections = {
+    assess: `
+      <div class="flow-detail active">
+        <div class="flow-title">Project assessment first</div>
+        <div class="flow-copy">Start every session by understanding the codebase, workspace, and current issues.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="openModal('assessment-modal')">🔍 Run Assessment</button>
+          <button class="feature-btn" onclick="openWorkspaceModal()">📂 Open Workspace</button>
+        </div>
+        <div class="info-row"><span class="info-key">Workspace</span><span class="info-val" id="flow-workspace-val">${escHtml(workspaceRoot || 'Project root')}</span></div>
+        <div class="info-row"><span class="info-key">Providers</span><span class="info-val">${escHtml(providerLabel)}</span></div>
+      </div>`,
+    plan: `
+      <div class="flow-detail active">
+        <div class="flow-title">Route the task</div>
+        <div class="flow-copy">Choose the task lane and inspect the workflow sequence before generating changes.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="openModal('workflow-modal');loadWorkflowSequence()">📋 View Workflow</button>
+          <button class="feature-btn" onclick="switchView('chat')">💬 Use Chat</button>
+        </div>
+        <div class="info-row"><span class="info-key">Task Mode</span><span class="info-val">${escHtml(taskLabel)}</span></div>
+        <div class="info-row"><span class="info-key">Last Task</span><span class="info-val">${escHtml(state.lastTaskType || '—')}</span></div>
+        <div class="info-row"><span class="info-key">Last Provider</span><span class="info-val">${escHtml(state.lastProvider || '—')}</span></div>
+      </div>`,
+    design: `
+      <div class="flow-detail active">
+        <div class="flow-title">Shape the solution</div>
+        <div class="flow-copy">Use scaffolds, glossary lookups, and dependency checks while defining approach.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="openGlossModal()">📖 Glossary</button>
+          <button class="feature-btn" onclick="openScaffoldModal()">🏗️ Scaffold</button>
+          <button class="feature-btn" onclick="openDepModal()">🔍 Deps</button>
+        </div>
+      </div>`,
+    build: `
+      <div class="flow-detail active">
+        <div class="flow-title">Implement</div>
+        <div class="flow-copy">Chat, editor, terminal, and workspace files stay together during the build step.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="switchView('editor')">📝 Editor</button>
+          <button class="feature-btn" onclick="toggleTerminal()">⬛ Terminal</button>
+          <button class="feature-btn" onclick="openSafeModal()">🛡️ Safe Check</button>
+        </div>
+        <div class="info-row"><span class="info-key">Open File</span><span class="info-val">${escHtml(currentOpenFile || 'None')}</span></div>
+      </div>`,
+    verify: `
+      <div class="flow-detail active">
+        <div class="flow-title">Verify output</div>
+        <div class="flow-copy">Keep quality scoring, provider health, and error explanation close to validation work.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="openScoreModal()">📊 Score Code</button>
+          <button class="feature-btn" onclick="openErrorModal()">🚨 Explain Error</button>
+          <button class="feature-btn" onclick="openHealthModal()">🏥 Provider Health</button>
+        </div>
+        <div class="info-row"><span class="info-key">Messages</span><span class="info-val">${state.sessionMsgs}</span></div>
+        <div class="info-row"><span class="info-key">Tokens</span><span class="info-val">${state.sessionTokens>999?(state.sessionTokens/1000).toFixed(1)+'k':state.sessionTokens}</span></div>
+        <div class="info-row"><span class="info-key">Last Response</span><span class="info-val">${state.lastResponseMs ? (state.lastResponseMs/1000).toFixed(2)+'s' : '—'}</span></div>
+      </div>`,
+    integrate: `
+      <div class="flow-detail active">
+        <div class="flow-title">Run MCP-backed tasks</div>
+        <div class="flow-copy">Inspect connected MCP servers and use tools that match the current workflow step.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="openModal('mcp-status-modal');loadMCPStatus()">🔌 MCP Status</button>
+          <button class="feature-btn" onclick="openToolsModal()">🛠️ Browse Tools</button>
+        </div>
+        <div id="tools-panel"></div>
+      </div>`,
+    ship: `
+      <div class="flow-detail active">
+        <div class="flow-title">Prepare handoff</div>
+        <div class="flow-copy">Git status and commit actions stay grouped here instead of living across the whole UI.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="openGitCommitModal()">⑂ Commit</button>
+          <button class="feature-btn" onclick="loadGitStatus()">🔄 Refresh Git</button>
+        </div>
+      </div>`,
+    settings: `
+      <div class="flow-detail active">
+        <div class="flow-title">Provider and UI settings</div>
+        <div class="flow-copy">API keys and experience toggles are centralized here to reduce repeated controls on screen.</div>
+        <div class="flow-actions">
+          <button class="feature-btn" onclick="openSettingsModal()">⚙️ Open Settings</button>
+          <button class="feature-btn" onclick="openUndoModal()">↩️ Undo Stack</button>
+        </div>
+        <div class="info-row"><span class="info-key">DeepSeek Key</span><span class="info-val ${state.settings.hasDeepSeekKey ? 'ok' : 'warn'}">${state.settings.hasDeepSeekKey ? 'Configured' : 'Missing'}</span></div>
+      </div>`,
+  };
+
+  panel.innerHTML = sections[step.id] || '';
+  if (step.id === 'integrate') {
+    renderToolsPanel(allTools);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INPUT SETUP
+// ═══════════════════════════════════════════════════════════
+function setupInput() {
+  const ta = document.getElementById('msg-input');
+  ta.addEventListener('keydown', e => {
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+  });
+  ta.addEventListener('input', () => {
+    ta.style.height='auto';
+    ta.style.height=Math.min(ta.scrollHeight,180)+'px';
+    document.getElementById('char-count').textContent = ta.value.length;
+    // live task detect
+    if(ta.value.length>10) debounceDetect(ta.value);
+  });
+}
+
+let detectTimer = null;
+function debounceDetect(text) {
+  clearTimeout(detectTimer);
+  detectTimer = setTimeout(() => detectTask(text), 400);
+}
+
+async function detectTask(text) {
+  if(state.selectedTask !== 'auto') return;
+  try {
+    const r = await fetch('/api/detect-task',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:[{role:'user',content:text}]})
+    });
+    if(!r.ok) return;
+    const d = await r.json();
+    if(d.taskType) {
+      const badge = document.getElementById('detected-task-badge');
+      const icons = {daily:'⚡',research:'🔬',complex_logic:'🧠',creative:'🎨',
+        templates:'📋',image:'🖼️',video:'🎬',long_session:'🏃',the_block:'⛓️',general:'🌐'};
+      badge.textContent = (icons[d.taskType]||'💬')+' '+d.taskType.replace(/_/g,' ');
+    }
+  } catch(_){}
+}
+
+function updateDetectedBadge() {
+  const badge = document.getElementById('detected-task-badge');
+  const icons = {auto:'⚡',daily:'⚡',research:'🔬',complex_logic:'🧠',creative:'🎨',
+    templates:'📋',image:'🖼️',video:'🎬',long_session:'🏃',the_block:'⛓️',general:'🌐'};
+  const s = state.selectedTask;
+  badge.textContent = (icons[s]||'💬')+' '+(s==='auto'?'Auto':s.replace(/_/g,' '));
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHAT SEND
+// ═══════════════════════════════════════════════════════════
+async function sendMessage() {
+  const ta = document.getElementById('msg-input');
+  const text = ta.value.trim();
+  if(!text || state.streaming) return;
+
+  // Rookie mode: prepend context to system prompt
+  const rookieMode = document.getElementById('t-rookie').checked;
+  const autoExplain = document.getElementById('t-autoexplain').checked;
+
+  const systemContent = buildSystemPrompt(rookieMode, autoExplain);
+
+  // Build message history
+  const history = state.msgs.filter(m=>m.role!=='system').map(m=>({role:m.role,content:m.content}));
+  const messages = [];
+  if(systemContent) messages.push({role:'system',content:systemContent});
+  messages.push(...history);
+  messages.push({role:'user',content:text});
+
+  // Add user message to UI
+  appendMsg({role:'user',content:text});
+  state.msgs.push({role:'user',content:text});
+  state.sessionMsgs++;
+  state.sessionTokens += Math.ceil(text.length/4);
+
+  ta.value='';
+  ta.style.height='auto';
+  document.getElementById('char-count').textContent='0';
+  hideWelcome();
+  updateStats();
+
+  const taskType = state.selectedTask==='auto' ? undefined : state.selectedTask;
+  state.respStart = Date.now();
+
+  // Safe mode check
+  if(document.getElementById('t-safemode').checked) {
+    const safe = checkLocalSafety(text);
+    if(safe === 'destructive') {
+      appendSystemMsg('⚠️ Safe Mode blocked a potentially destructive operation in your message. Please confirm you want to proceed.');
+      setSending(false);
+      return;
+    }
+  }
+
+  setSending(true);
+  showTyping();
+
+  try {
+    await streamChat(messages, taskType);
+  } catch(e) {
+    hideTyping();
+    appendSystemMsg('❌ Error: '+e.message);
+    setSending(false);
+  }
+}
+
+function buildSystemPrompt(rookieMode, autoExplain) {
+  let parts = [];
+  if(rookieMode) parts.push('You are helping a beginner developer. Use plain English, avoid jargon, give step-by-step explanations, and use analogies where helpful.');
+  if(autoExplain) parts.push('After every code block you produce, add a section starting with "💡 What this does:" that explains the code in plain English.');
+  return parts.join('\n');
+}
+
+function checkLocalSafety(text) {
+  const destructive = ['rm -rf','DROP TABLE','DROP DATABASE','DELETE FROM','format c:',
+    'del /f /s /q','git push --force','truncate table','wipe','nuke','shutdown -r'];
+  const tl = text.toLowerCase();
+  if(destructive.some(d=>tl.includes(d))) return 'destructive';
+  return 'safe';
+}
+
+async function streamChat(messages, taskType) {
+  state.abortCtrl = new AbortController();
+
+  const resp = await fetch('/api/chat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({messages, taskType, stream:true}),
+    signal: state.abortCtrl.signal
+  });
+
+  if(!resp.ok) {
+    const err = await resp.json().catch(()=>({error:'HTTP '+resp.status}));
+    throw new Error(err.error||'Request failed');
+  }
+
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let fullContent = '';
+  let msgEl = null;
+  let contentEl = null;
+  let detectedTask = taskType||'auto';
+  let qualityReports = [];
+
+  hideTyping();
+
+  while(true) {
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += dec.decode(value, {stream:true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+
+    for(const line of lines) {
+      if(!line.startsWith('data:')) continue;
+      const raw = line.slice(5).trim();
+      if(!raw) continue;
+      let evt;
+      try { evt = JSON.parse(raw); } catch(_) { continue; }
+
+      if(evt.type==='task') {
+        detectedTask = evt.taskType;
+        state.lastTaskType = detectedTask;
+        renderFlowDetail();
+      }
+      else if(evt.type==='chunk' && evt.content) {
+        fullContent += evt.content;
+        if(!msgEl) {
+          const pair = appendAssistantMsg('', detectedTask);
+          msgEl = pair.msgEl;
+          contentEl = pair.contentEl;
+        }
+        contentEl.innerHTML = renderMarkdown(fullContent);
+        scrollToBottom();
+      }
+      else if(evt.type==='done') {
+        qualityReports = evt.qualityReports||[];
+        detectedTask = evt.taskType||detectedTask;
+        // Show quality in code blocks
+        if(msgEl && document.getElementById('t-quality').checked && qualityReports.length>0) {
+          injectQualityIntoMsg(msgEl, qualityReports);
+          renderQualityWidget(qualityReports[0]);
+          state.lastQuality = qualityReports[0];
+        }
+        // Intent validation
+        if(document.getElementById('t-intent').checked && messages.length>0) {
+          const userMsg = [...messages].reverse().find(m=>m.role==='user');
+          if(userMsg) validateIntentAsync(userMsg.content, fullContent, msgEl);
+        }
+        // Confidence score
+        if(document.getElementById('t-confidence').checked && fullContent) {
+          assessConfidenceAsync(fullContent, msgEl);
+        }
+      }
+      else if(evt.type==='error') {
+        throw new Error(evt.error||'Stream error');
+      }
+    }
+  }
+
+  if(fullContent) {
+    // Update undo stack
+    pushUndo(fullContent);
+    state.msgs.push({role:'assistant',content:fullContent,meta:{task:detectedTask}});
+    state.sessionTokens += Math.ceil(fullContent.length/4);
+    state.sessionMsgs++;
+    updateStats();
+    updateLastRespInfo(detectedTask, null, null, Date.now()-state.respStart);
+    renderFlowDetail();
+  }
+
+  setSending(false);
+}
+
+async function validateIntentAsync(userReq, aiResp, msgEl) {
+  try {
+    const r = await fetch('/api/validate-intent',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({userRequest:userReq,aiResponse:aiResp})
+    });
+    if(!r.ok) return;
+    const d = await r.json();
+    if(d.result && msgEl) {
+      const score = d.result.confidence||d.result.score||0;
+      const meta = msgEl.querySelector('.msg-meta');
+      if(meta) {
+        const badge = document.createElement('span');
+        badge.className = 'msg-badge';
+        badge.style.background = score>0.7?'rgba(16,185,129,.15)':'rgba(245,158,11,.15)';
+        badge.style.color = score>0.7?'var(--success)':'var(--warning)';
+        badge.title = d.result.verdict||'';
+        badge.textContent = `🎯 ${Math.round(score*100)}%`;
+        meta.appendChild(badge);
+      }
+    }
+  } catch(_){}
+}
+
+async function assessConfidenceAsync(text, msgEl) {
+  try {
+    const r = await fetch('/api/confidence',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text})
+    });
+    if(!r.ok) return;
+    const d = await r.json();
+    if(d.assessment && msgEl) {
+      const score = d.assessment.score||0;
+      const meta = msgEl.querySelector('.msg-meta');
+      if(meta) {
+        const badge = document.createElement('span');
+        badge.className = 'msg-badge';
+        badge.style.background = score>70?'rgba(16,185,129,.15)':'rgba(245,158,11,.15)';
+        badge.style.color = score>70?'var(--success)':'var(--warning)';
+        badge.title = 'Confidence: '+score+'/100';
+        badge.textContent = `🔮 ${score}`;
+        meta.appendChild(badge);
+      }
+    }
+  } catch(_){}
+}
+
+function stopStream() {
+  if(state.abortCtrl) state.abortCtrl.abort();
+  setSending(false);
+  hideTyping();
+}
+
+function setSending(v) {
+  state.streaming = v;
+  document.getElementById('send-btn').disabled = v;
+  const stop = document.getElementById('stop-btn');
+  if(v) stop.classList.add('show'); else stop.classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════════
+// MESSAGE RENDERING
+// ═══════════════════════════════════════════════════════════
+function appendMsg(msg) {
+  const wrap = document.getElementById('msgs');
+  const el = document.createElement('div');
+  el.className = 'msg '+msg.role;
+  const avatar = msg.role==='user' ? '👤' : '🔮';
+  const name = msg.role==='user' ? 'You' : 'Megacode';
+  el.innerHTML = `
+    <div class="msg-avatar">${avatar}</div>
+    <div class="msg-body">
+      <div class="msg-meta">
+        <span class="msg-name">${name}</span>
+        <span class="msg-time">${fmtTime()}</span>
+      </div>
+      <div class="msg-content">${renderMarkdown(msg.content)}</div>
+    </div>`;
+  wrap.appendChild(el);
+  scrollToBottom();
+}
+
+function appendAssistantMsg(content, taskType) {
+  const wrap = document.getElementById('msgs');
+  const el = document.createElement('div');
+  el.className = 'msg assistant';
+  const icons = {daily:'⚡',research:'🔬',complex_logic:'🧠',creative:'🎨',
+    templates:'📋',image:'🖼️',video:'🎬',long_session:'🏃',the_block:'⛓️',general:'🌐'};
+  const icon = icons[taskType]||'💬';
+  el.innerHTML = `
+    <div class="msg-avatar">🔮</div>
+    <div class="msg-body">
+      <div class="msg-meta">
+        <span class="msg-name">Megacode</span>
+        <span class="msg-time">${fmtTime()}</span>
+        <span class="msg-badge provider">${icon} ${taskType||'auto'}</span>
+      </div>
+      <div class="msg-content"></div>
+    </div>`;
+  wrap.appendChild(el);
+  scrollToBottom();
+  return {msgEl:el, contentEl:el.querySelector('.msg-content')};
+}
+
+function appendSystemMsg(text) {
+  const wrap = document.getElementById('msgs');
+  const el = document.createElement('div');
+  el.className = 'msg system-msg';
+  el.innerHTML = `
+    <div class="msg-avatar">⚙️</div>
+    <div class="msg-body">
+      <div class="msg-meta">
+        <span class="msg-name" style="color:var(--text-muted)">System</span>
+        <span class="msg-time">${fmtTime()}</span>
+      </div>
+      <div class="msg-content" style="color:var(--text-muted)">${escHtml(text)}</div>
+    </div>`;
+  wrap.appendChild(el);
+  scrollToBottom();
+}
+
+function injectQualityIntoMsg(msgEl, reports) {
+  if(!reports||!reports.length) return;
+  const codeBlocks = msgEl.querySelectorAll('.code-block');
+  reports.forEach((r,i) => {
+    if(!codeBlocks[i]) return;
+    const rep = r.report;
+    if(!rep) return;
+    const bar = document.createElement('div');
+    bar.className='quality-bar';
+    const cls = rep.score>=80?'great':rep.score>=60?'ok':'bad';
+    const issueHtml = rep.issues.slice(0,3).map(iss=>
+      `<span class="q-issue-item ${iss.severity}">[${iss.severity}] ${escHtml(iss.message)}</span>`
+    ).join(' ');
+    bar.innerHTML=`<span class="q-score ${cls}">${rep.score}/100</span><span class="q-issues">${issueHtml||'No issues detected ✓'}</span>`;
+    codeBlocks[i].appendChild(bar);
+  });
+}
+
+function renderQualityWidget(r) {
+  if(!r||!r.report) return;
+  const rep = r.report;
+  const w = document.getElementById('quality-widget');
+  const cls = rep.score>=80?'great':rep.score>=60?'ok':'bad';
+  const issuesHtml = rep.issues.length===0
+    ? '<div style="color:var(--success);font-size:11px;text-align:center;padding:6px">✅ No issues detected</div>'
+    : `<ul class="issue-list">${rep.issues.map(i=>
+        `<li><span class="issue-sev ${i.severity}">${i.severity}</span><span>${escHtml(i.message)}</span></li>`
+      ).join('')}</ul>`;
+  w.innerHTML=`
+    <div class="quality-circle-wrap">
+      <div class="quality-circle ${cls}">
+        <div class="qc-num">${rep.score}</div>
+        <div class="qc-lbl">/ 100</div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);text-align:center;margin-bottom:8px">
+      ${rep.language} · ${rep.lineCount} lines
+    </div>
+    ${issuesHtml}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MARKDOWN RENDERER (light-weight)
+// ═══════════════════════════════════════════════════════════
+function renderMarkdown(text) {
+  if(!text) return '';
+  let codeIdx = 0;
+  const codeBlocks = [];
+  // Extract fenced code blocks
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (m,lang,code)=>{
+    const id = '__CODE_'+codeIdx+'__';
+    codeBlocks.push({id,lang:lang||'code',code});
+    codeIdx++;
+    return id;
+  });
+  // Escape remaining HTML
+  text = escHtml(text);
+  // Inline code
+  text = text.replace(/`([^`\n]+)`/g,'<code class="inline-code">$1</code>');
+  // Bold
+  text = text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  // Italic
+  text = text.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  // Headers
+  text = text.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  text = text.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  text = text.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  // HR
+  text = text.replace(/^---+$/gm,'<hr/>');
+  // Unordered lists
+  text = text.replace(/^[\-\*] (.+)$/gm,'<li>$1</li>');
+  text = text.replace(/(<li>.*<\/li>(\n|$))+/g,m=>'<ul>'+m+'</ul>');
+  // Ordered lists
+  text = text.replace(/^\d+\. (.+)$/gm,'<li>$1</li>');
+  // Paragraphs (double newline)
+  text = text.replace(/\n{2,}/g,'</p><p>');
+  text = '<p>'+text+'</p>';
+  // Single newlines → <br>
+  text = text.replace(/([^>])\n([^<])/g,'$1<br>$2');
+  // Restore code blocks
+  codeBlocks.forEach(({id,lang,code})=>{
+    const htmlCode = escHtml(code);
+    const block = `<div class="code-block" data-lang="${escHtml(lang)}">
+      <div class="code-header">
+        <span class="code-lang">${escHtml(lang)}</span>
+        <div class="code-actions">
+          <button class="code-btn" onclick="copyCode(this)">📋 Copy</button>
+          <button class="code-btn" onclick="scoreCodeFromBlock(this)">📊 Score</button>
+          <button class="code-btn" onclick="applyCodeToFile(this)">📥 Apply</button>
+        </div>
+      </div>
+      <div class="code-body"><pre>${htmlCode}</pre></div>
+    </div>`;
+    text = text.replace(id, block);
+  });
+  return text;
+}
+
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(()=>{
+    btn.textContent='✅ Copied';
+    setTimeout(()=>btn.textContent='📋 Copy',1500);
+  }).catch(()=>toast('Copy failed','err'));
+}
+
+function scoreCodeFromBlock(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  document.getElementById('score-input').value = pre.textContent;
+  openScoreModal();
+  setTimeout(scoreCode, 100);
+}
+
+// ═══════════════════════════════════════════════════════════
+// TYPING INDICATOR
+// ═══════════════════════════════════════════════════════════
+function showTyping() {
+  const wrap = document.getElementById('msgs');
+  const el = document.createElement('div');
+  el.id='typing-indicator';
+  el.className='typing-wrap';
+  el.innerHTML=`<div class="msg-avatar" style="background:var(--primary-dim);border:1px solid var(--primary);font-size:14px">🔮</div>
+    <div class="typing-dots"><span></span><span></span><span></span></div>`;
+  wrap.appendChild(el);
+  scrollToBottom();
+}
+function hideTyping() {
+  const el = document.getElementById('typing-indicator');
+  if(el) el.remove();
+}
+
+// ═══════════════════════════════════════════════════════════
+// STATS + UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function updateStats() {
+  renderFlowDetail();
+}
+
+function updateLastRespInfo(task, provider, model, ms) {
+  if(task) state.lastTaskType=task;
+  if(provider) { state.lastProvider = provider; document.getElementById('provider-badge').textContent=provider; }
+  if(model) state.lastModel = model;
+  if(ms) state.lastResponseMs = ms;
+  renderFlowDetail();
+}
+
+function hideWelcome() {
+  const w = document.getElementById('welcome');
+  if(w) w.remove();
+}
+
+function clearChat() {
+  state.msgs = [];
+  state.sessionMsgs = 0;
+  state.sessionTokens = 0;
+  const msgs = document.getElementById('msgs');
+  msgs.innerHTML = `<div id="welcome">
+    <div class="welcome-icon">🔮</div>
+    <div class="welcome-title">Welcome to Megacode</div>
+    <div class="welcome-sub">Full-stack AI coding tool with multi-LLM routing, code editor, terminal, git integration, and vibe coding safety features.</div>
+    <div class="quick-prompts" id="quick-prompts">
+      <div class="qp" onclick="quickSend('Explain how the LLM router works in this project')">🔬 Explain LLM router</div>
+      <div class="qp" onclick="quickSend('Review this TypeScript code for issues:\n\nconst getData = async () => {\n  try {\n    const res = await fetch(\"/api\")\n    return res.json()\n  } catch(e) {}\n}')">🧠 Review code</div>
+      <div class="qp" onclick="quickSend('Design a dark-themed dashboard UI for a coding assistant')">🎨 Design a dashboard UI</div>
+      <div class="qp" onclick="quickSend('Create a React + TypeScript project template with Tailwind and Vite')">📋 React + TS template</div>
+      <div class="qp" onclick="quickSend('What is a WebSocket and how does it differ from HTTP?')">📖 Explain WebSockets</div>
+      <div class="qp" onclick="quickSend('Write a comprehensive guide to blockchain smart contracts')">⛓️ Blockchain guide</div>
+    </div>
+  </div>`;
+  updateStats();
+  document.getElementById('quality-widget').innerHTML='<div class="empty-state"><div class="ei">📊</div>No code scored yet</div>';
+  renderFlowDetail();
+  toast('Chat cleared','ok');
+}
+
+function quickSend(txt) {
+  document.getElementById('msg-input').value = txt;
+  document.getElementById('msg-input').dispatchEvent(new Event('input'));
+  sendMessage();
+}
+
+function scrollToBottom() {
+  const el = document.getElementById('msgs');
+  el.scrollTop = el.scrollHeight;
+}
+
+function fmtTime() {
+  const n=new Date();
+  return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════
+// UNDO STACK
+// ═══════════════════════════════════════════════════════════
+function pushUndo(code) {
+  state.undoStack = state.undoStack.slice(0, state.undoPtr+1);
+  state.undoStack.push(code);
+  if(state.undoStack.length>20) state.undoStack.shift();
+  state.undoPtr = state.undoStack.length-1;
+}
+
+function undoAction() {
+  if(state.undoPtr<=0) { toast('Nothing to undo','warn'); return; }
+  state.undoPtr--;
+  const content = state.undoStack[state.undoPtr];
+  document.getElementById('msg-input').value = content;
+  toast('Undone to previous state','ok');
+  renderUndoStack();
+}
+
+function redoAction() {
+  if(state.undoPtr>=state.undoStack.length-1) { toast('Nothing to redo','warn'); return; }
+  state.undoPtr++;
+  const content = state.undoStack[state.undoPtr];
+  document.getElementById('msg-input').value = content;
+  toast('Redone','ok');
+  renderUndoStack();
+}
+
+function renderUndoStack() {
+  const el = document.getElementById('undo-stack-list');
+  if(!state.undoStack.length) {
+    el.innerHTML='<div class="empty-state"><div class="ei">↩️</div>No edits yet</div>';
+    return;
+  }
+  el.innerHTML = state.undoStack.map((c,i)=>`
+    <div class="result-row" style="${i===state.undoPtr?'background:var(--primary-dim)':''}">
+      <span class="result-key">${i===state.undoPtr?'▶ ':''}Edit ${i+1}</span>
+      <span class="result-val">${escHtml(c.slice(0,60))}${c.length>60?'…':''}</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODALS
+// ═══════════════════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+
+function openWorkspaceModal() {
+  openModal('open-folder-modal');
+  document.getElementById('folder-path-input').focus();
+}
+
+async function openSettingsModal() {
+  openModal('settings-modal');
+  await loadSettings();
+}
+
+async function loadSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Failed to load settings');
+    state.settings = d.settings || state.settings;
+    document.getElementById('deepseek-key-status').textContent = state.settings.hasDeepSeekKey ? 'Configured' : 'Not configured';
+    renderFlowDetail();
+  } catch (e) {
+    document.getElementById('settings-feedback').innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(e.message)}</div>`;
+  }
+}
+
+async function saveDeepSeekKey() {
+  const input = document.getElementById('deepseek-api-input');
+  const feedback = document.getElementById('settings-feedback');
+  const deepseek = input.value.trim();
+  if (!deepseek) {
+    feedback.innerHTML = '<div style="color:var(--warning);font-size:12px">Paste a DeepSeek key first.</div>';
+    return;
+  }
+  feedback.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Saving key…</div>';
+  try {
+    const r = await fetch('/api/settings/api-keys', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ deepseek })
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Failed to save key');
+    input.value = '';
+    state.settings = d.settings || state.settings;
+    document.getElementById('deepseek-key-status').textContent = 'Configured';
+    feedback.innerHTML = '<div style="color:var(--success);font-size:12px">DeepSeek key saved for this running server.</div>';
+    await loadStatus();
+    toast('DeepSeek key updated', 'ok');
+  } catch (e) {
+    feedback.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(e.message)}</div>`;
+  }
+}
+
+async function openHealthModal() {
+  openModal('health-modal');
+  document.getElementById('health-results').innerHTML='<div class="empty-state"><div class="ei">🏥</div>Running health check…</div>';
+  try {
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    const h = d.health||{};
+    const entries = Object.entries(h);
+    if(!entries.length) {
+      document.getElementById('health-results').innerHTML='<div class="empty-state"><div class="ei">⚠️</div>No providers to check</div>';
+      return;
+    }
+    document.getElementById('health-results').innerHTML = entries.map(([p,ok])=>`
+      <div class="result-row">
+        <span class="result-key">${p}</span>
+        <span class="result-val ${ok?'ok':'err'}">${ok?'✅ Healthy':'❌ Unhealthy'}</span>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('health-results').innerHTML=`<div style="color:var(--error);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function openGlossModal() { openModal('gloss-modal'); document.getElementById('gloss-input').focus(); }
+function openScaffoldModal() { openModal('scaffold-modal'); document.getElementById('scaffold-input').focus(); }
+function openDepModal() { openModal('dep-modal'); document.getElementById('dep-input').focus(); }
+function openErrorModal() { openModal('error-modal'); document.getElementById('error-input').focus(); }
+function openScoreModal() { openModal('score-modal'); document.getElementById('score-input').focus(); }
+function openSafeModal() { openModal('safe-modal'); document.getElementById('safe-input').focus(); }
+function openUndoModal() { openModal('undo-modal'); renderUndoStack(); }
+
+async function lookupGlossary() {
+  const term = document.getElementById('gloss-input').value.trim();
+  if(!term) return;
+  document.getElementById('gloss-result').innerHTML='<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Looking up…</div>';
+  try {
+    const r = await fetch('/api/glossary/'+encodeURIComponent(term));
+    const d = await r.json();
+    if(d.entry) {
+      const e = d.entry;
+      document.getElementById('gloss-result').innerHTML=`
+        <div style="margin-top:12px">
+          <div class="result-row"><span class="result-key">Term</span><span class="result-val">${escHtml(e.term||term)}</span></div>
+          <div class="result-row"><span class="result-key">Definition</span><span class="result-val" style="max-width:340px;white-space:normal;text-align:left">${escHtml(e.definition||'')}</span></div>
+          ${e.analogy?`<div class="result-row"><span class="result-key">Analogy</span><span class="result-val" style="max-width:340px;white-space:normal;text-align:left;color:var(--text-dim)">${escHtml(e.analogy)}</span></div>`:''}
+          ${e.examples&&e.examples.length?`<div class="result-row"><span class="result-key">Examples</span><span class="result-val">${e.examples.map(escHtml).join(', ')}</span></div>`:''}
+        </div>`;
+    } else {
+      document.getElementById('gloss-result').innerHTML=`<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Term not found in glossary.</div>`;
+    }
+  } catch(e) {
+    document.getElementById('gloss-result').innerHTML=`<div style="color:var(--error);font-size:12px;margin-top:10px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && document.getElementById('settings-modal').classList.contains('show')) saveDeepSeekKey();
+  if(e.key==='Enter' && document.getElementById('gloss-modal').classList.contains('show')) lookupGlossary();
+  if(e.key==='Enter' && document.getElementById('scaffold-modal').classList.contains('show')) runScaffold();
+  if(e.key==='Enter' && document.getElementById('dep-modal').classList.contains('show')) checkDep();
+  if(e.key==='Enter' && document.getElementById('safe-modal').classList.contains('show')) checkSafe();
+  if(e.key==='Escape') document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'));
+});
+
+async function runScaffold() {
+  const desc = document.getElementById('scaffold-input').value.trim();
+  if(!desc) return;
+  document.getElementById('scaffold-result').innerHTML='<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Generating…</div>';
+  try {
+    const r = await fetch('/api/scaffold',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:desc})});
+    const d = await r.json();
+    if(d.result) {
+      const res = d.result;
+      const files = (res.files||res.fileTree||[]).map(f=>{
+        const name = f.path||f.name||f;
+        const isDir = name.endsWith('/') || (f.type==='directory');
+        return `<div class="${isDir?'dir':'file'}">${isDir?'📁':'📄'} ${escHtml(name)}</div>`;
+      }).join('');
+      document.getElementById('scaffold-result').innerHTML=`
+        <div style="margin-top:12px">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${escHtml(res.description||desc)}</div>
+          <div class="result-box scaffold-tree">${files||'<em>No files generated</em>'}</div>
+          ${res.commands&&res.commands.length?`<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Setup commands:</div><div class="result-box">${res.commands.map(c=>'$ '+escHtml(c)).join('\n')}</div>`:''}
+        </div>`;
+    } else {
+      document.getElementById('scaffold-result').innerHTML=`<div style="color:var(--text-muted);font-size:12px;margin-top:10px">No result returned.</div>`;
+    }
+  } catch(e) {
+    document.getElementById('scaffold-result').innerHTML=`<div style="color:var(--error);font-size:12px;margin-top:10px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function checkDep() {
+  const pkg = document.getElementById('dep-input').value.trim();
+  const ver = document.getElementById('dep-ver-input').value.trim();
+  if(!pkg) return;
+  document.getElementById('dep-result').innerHTML='<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Checking…</div>';
+  try {
+    const r = await fetch('/api/check-dependency',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({packageName:pkg,version:ver||undefined})});
+    const d = await r.json();
+    if(d.advice) {
+      const a = d.advice;
+      const ratingColor = {trusted:'ok',popular:'ok',unknown:'warn',risky:'err'}[a.rating]||'';
+      document.getElementById('dep-result').innerHTML=`
+        <div style="margin-top:12px">
+          <div class="result-row"><span class="result-key">Package</span><span class="result-val">${escHtml(a.packageName||pkg)}</span></div>
+          <div class="result-row"><span class="result-key">Rating</span><span class="result-val ${ratingColor}">${escHtml(a.rating||'unknown')}</span></div>
+          <div class="result-row"><span class="result-key">Description</span><span class="result-val" style="max-width:300px;white-space:normal;text-align:left">${escHtml(a.description||'')}</span></div>
+          ${a.warnings&&a.warnings.length?`<div class="result-row"><span class="result-key">Warnings</span><span class="result-val err" style="max-width:300px;white-space:normal;text-align:left">${a.warnings.map(escHtml).join('; ')}</span></div>`:''}
+          ${a.recommendation?`<div class="result-row"><span class="result-key">Suggestion</span><span class="result-val" style="max-width:300px;white-space:normal;text-align:left;color:var(--text-dim)">${escHtml(a.recommendation)}</span></div>`:''}
+        </div>`;
+    } else {
+      document.getElementById('dep-result').innerHTML=`<div style="color:var(--text-muted);font-size:12px;margin-top:10px">No data for this package.</div>`;
+    }
+  } catch(e) {
+    document.getElementById('dep-result').innerHTML=`<div style="color:var(--error);font-size:12px;margin-top:10px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function explainError() {
+  const msg = document.getElementById('error-input').value.trim();
+  if(!msg) return;
+  document.getElementById('error-result').innerHTML='<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Analyzing…</div>';
+  try {
+    const r = await fetch('/api/explain-error',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({errorMessage:msg})});
+    const d = await r.json();
+    if(d.explanation) {
+      const e = d.explanation;
+      const conf = Math.round((e.confidence||0)*100);
+      document.getElementById('error-result').innerHTML=`
+        <div style="margin-top:12px">
+          <div class="result-row"><span class="result-key">Plain English</span><span class="result-val" style="max-width:320px;white-space:normal;text-align:left">${escHtml(e.plainEnglish||'')}</span></div>
+          <div class="result-row"><span class="result-key">Fix Suggestion</span><span class="result-val ok" style="max-width:320px;white-space:normal;text-align:left">${escHtml(e.suggestion||'')}</span></div>
+          <div class="result-row"><span class="result-key">Confidence</span><span class="result-val ${conf>70?'ok':'warn'}">${conf}%</span></div>
+        </div>`;
+    } else {
+      document.getElementById('error-result').innerHTML=`<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Could not analyze this error.</div>`;
+    }
+  } catch(e) {
+    document.getElementById('error-result').innerHTML=`<div style="color:var(--error);font-size:12px;margin-top:10px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function scoreCode() {
+  const code = document.getElementById('score-input').value.trim();
+  if(!code) return;
+  document.getElementById('score-result').innerHTML='<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Scoring…</div>';
+  try {
+    const r = await fetch('/api/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const d = await r.json();
+    if(d.report) {
+      const rep = d.report;
+      const cls = rep.score>=80?'ok':'err';
+      const issuesHtml = rep.issues.map(i=>`
+        <div class="result-row">
+          <span class="result-key"><span class="issue-sev ${i.severity}" style="margin-right:5px">${i.severity}</span>${escHtml(i.code)}</span>
+          <span class="result-val" style="max-width:240px;white-space:normal;text-align:left">${escHtml(i.message)}</span>
+        </div>`).join('');
+      document.getElementById('score-result').innerHTML=`
+        <div style="margin-top:12px">
+          <div class="result-row"><span class="result-key">Score</span><span class="result-val ${cls}">${rep.score}/100</span></div>
+          <div class="result-row"><span class="result-key">Language</span><span class="result-val">${escHtml(rep.language)}</span></div>
+          <div class="result-row"><span class="result-key">Lines</span><span class="result-val">${rep.lineCount}</span></div>
+          <div class="result-row"><span class="result-key">Issues</span><span class="result-val ${rep.issues.length?'warn':'ok'}">${rep.issues.length}</span></div>
+          ${issuesHtml}
+        </div>`;
+    } else {
+      document.getElementById('score-result').innerHTML=`<div style="color:var(--text-muted);font-size:12px;margin-top:10px">No report returned.</div>`;
+    }
+  } catch(e) {
+    document.getElementById('score-result').innerHTML=`<div style="color:var(--error);font-size:12px;margin-top:10px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function checkSafe() {
+  const op = document.getElementById('safe-input').value.trim();
+  if(!op) return;
+  document.getElementById('safe-result').innerHTML='<div style="color:var(--text-muted);font-size:12px;margin-top:10px">Checking…</div>';
+  try {
+    const r = await fetch('/api/safe-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:op})});
+    const d = await r.json();
+    if(d.result) {
+      const res = d.result;
+      const riskColor = {safe:'ok',cautious:'warn',destructive:'err'}[res.riskLevel||res.level||'safe']||'';
+      document.getElementById('safe-result').innerHTML=`
+        <div style="margin-top:12px">
+          <div class="result-row"><span class="result-key">Risk Level</span><span class="result-val ${riskColor}">${escHtml(res.riskLevel||res.level||'unknown')}</span></div>
+          <div class="result-row"><span class="result-key">Safe to Run</span><span class="result-val ${res.allowed?'ok':'err'}">${res.allowed?'Yes ✅':'No ❌ — Confirmation required'}</span></div>
+          ${res.reason?`<div class="result-row"><span class="result-key">Reason</span><span class="result-val" style="max-width:300px;white-space:normal;text-align:left;color:var(--text-dim)">${escHtml(res.reason)}</span></div>`:''}
+        </div>`;
+    } else {
+      document.getElementById('safe-result').innerHTML=`<div style="color:var(--text-muted);font-size:12px;margin-top:10px">No classification returned.</div>`;
+    }
+  } catch(e) {
+    document.getElementById('safe-result').innerHTML=`<div style="color:var(--error);font-size:12px;margin-top:10px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOAST NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════
+function toast(msg, type='ok', dur=3000) {
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className='toast '+type;
+  el.textContent=msg;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity 0.4s'; setTimeout(()=>el.remove(),400); }, dur);
+}
+
+// ═══════════════════════════════════════════════════════════
+// VIEW SWITCHING (Chat <-> Editor)
+// ═══════════════════════════════════════════════════════════
+let currentView = 'chat';
+let toolsStatus = { ok: false, available: false, toolsCount: 0, ideConnected: false };
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.view === view);
+  });
+  const chatWrap = document.getElementById('chat-wrap');
+  const editorPanel = document.getElementById('editor-panel');
+  if (view === 'editor') {
+    chatWrap.classList.add('hide');
+    editorPanel.classList.add('show');
+    initMonaco().then(() => {
+      if (monacoEditor) monacoEditor.layout();
+      if (currentOpenFile) activateFile(currentOpenFile);
+    }).catch((err) => {
+      toast('Monaco failed to load: ' + err.message, 'err');
+    });
+  } else {
+    chatWrap.classList.remove('hide');
+    editorPanel.classList.remove('show');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORKSPACE / OPEN FOLDER
+// ═══════════════════════════════════════════════════════════
+let workspaceRoot = '';
+
+document.getElementById('open-folder-btn').addEventListener('click', () => {
+  openWorkspaceModal();
+});
+
+async function openWorkspace() {
+  const folderPath = document.getElementById('folder-path-input').value.trim();
+  if (!folderPath) { toast('Enter a folder path', 'warn'); return; }
+  await doOpenWorkspace(folderPath);
+}
+
+async function openWorkspaceDefault() {
+  const resultEl = document.getElementById('folder-result');
+  resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Opening project root…</div>';
+  try {
+    const r = await fetch('/api/workspace/reset', { method: 'POST', headers: {'Content-Type':'application/json'} });
+    const d = await r.json();
+    if (d.ok || d.root) {
+      workspaceRoot = d.root;
+      document.getElementById('workspace-name').textContent = workspaceRoot.split(/[\\/]/).pop();
+      document.getElementById('workspace-name').title = workspaceRoot;
+      document.getElementById('workspace-flow-name').textContent = workspaceRoot.split(/[\\/]/).pop();
+      document.getElementById('workspace-flow-name').title = workspaceRoot;
+      document.getElementById('file-tree-panel').classList.add('show');
+      closeModal('open-folder-modal');
+      resultEl.innerHTML = '';
+      await refreshFileTree();
+      await loadGitStatus();
+      renderFlowDetail();
+      toast('Opened: ' + workspaceRoot, 'ok');
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(d.error || 'Failed to open')}</div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function doOpenWorkspace(folderPath) {
+  const resultEl = document.getElementById('folder-result');
+  resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Opening…</div>';
+  try {
+    let r;
+    if (folderPath) {
+      r = await fetch('/api/workspace/open', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ folderPath })
+      });
+    } else {
+      r = await fetch('/api/workspace');
+    }
+    const d = await r.json();
+    if (d.ok || d.root) {
+      workspaceRoot = d.root;
+      document.getElementById('workspace-name').textContent = workspaceRoot.split(/[\\/]/).pop();
+      document.getElementById('workspace-name').title = workspaceRoot;
+      document.getElementById('workspace-flow-name').textContent = workspaceRoot.split(/[\\/]/).pop();
+      document.getElementById('workspace-flow-name').title = workspaceRoot;
+      document.getElementById('file-tree-panel').classList.add('show');
+      closeModal('open-folder-modal');
+      resultEl.innerHTML = '';
+      await refreshFileTree();
+      await loadGitStatus();
+      renderFlowDetail();
+      toast('Opened: ' + workspaceRoot, 'ok');
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(d.error || 'Failed to open')}</div>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILE TREE
+// ═══════════════════════════════════════════════════════════
+let fileTreeData = [];
+let expandedDirs = new Set();
+
+async function refreshFileTree() {
+  try {
+    const r = await fetch('/api/files/tree?depth=4');
+    const d = await r.json();
+    if (d.ok) {
+      fileTreeData = d.tree;
+      renderFileTree(fileTreeData);
+    }
+  } catch(e) {
+    toast('Failed to load file tree: ' + e.message, 'err');
+  }
+}
+
+function renderFileTree(tree, filter='') {
+  const el = document.getElementById('file-tree');
+  if (!tree || tree.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px"><div class="ei">📂</div>Empty directory</div>';
+    return;
+  }
+  el.innerHTML = renderTreeNodes(tree, 0, filter.toLowerCase());
+}
+
+function renderTreeNodes(nodes, depth, filter) {
+  let html = '';
+  for (const node of nodes) {
+    if (filter && !nodeMatchesFilter(node, filter)) continue;
+    const indent = depth * 16;
+    const isDir = node.type === 'directory';
+    const expanded = expandedDirs.has(node.path);
+    const icon = isDir ? (expanded ? '📂' : '📁') : getFileIcon(node.name);
+    const activeClass = (currentOpenFile && currentOpenFile === node.path) ? ' active' : '';
+    const arrowClass = isDir ? (expanded ? 'arrow open' : 'arrow') : 'arrow hidden';
+
+    html += `<div class="tree-item${activeClass}" style="padding-left:${8 + indent}px" `
+      + (isDir
+        ? `onclick="toggleDir('${escAttr(node.path)}')" `
+        : `ondblclick="openFile('${escAttr(node.path)}')" onclick="selectTreeItem(this,'${escAttr(node.path)}')" `)
+      + `title="${escAttr(node.path)}">`
+      + `<span class="${arrowClass}">▶</span>`
+      + `<span class="icon">${icon}</span>`
+      + `<span class="name">${escHtml(node.name)}</span>`
+      + `</div>`;
+
+    if (isDir && expanded && node.children) {
+      html += renderTreeNodes(node.children, depth + 1, filter);
+    }
+  }
+  return html;
+}
+
+function nodeMatchesFilter(node, filter) {
+  if (node.name.toLowerCase().includes(filter)) return true;
+  if (node.type === 'directory' && node.children) {
+    return node.children.some(c => nodeMatchesFilter(c, filter));
+  }
+  return false;
+}
+
+function toggleDir(dirPath) {
+  if (expandedDirs.has(dirPath)) expandedDirs.delete(dirPath);
+  else expandedDirs.add(dirPath);
+  renderFileTree(fileTreeData, document.getElementById('file-search-input').value);
+}
+
+function selectTreeItem(el, filePath) {
+  document.querySelectorAll('.tree-item.active').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function filterFileTree(val) {
+  renderFileTree(fileTreeData, val);
+}
+
+function getFileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const icons = {
+    js:'📜',ts:'🔷',jsx:'⚛️',tsx:'⚛️',json:'📋',md:'📝',txt:'📄',
+    html:'🌐',css:'🎨',scss:'🎨',py:'🐍',rb:'💎',go:'🔵',rs:'🦀',
+    java:'☕',c:'🔧',cpp:'🔧',h:'🔧',sh:'⚙️',bat:'⚙️',
+    yaml:'📋',yml:'📋',xml:'📋',sql:'🗃️',svg:'🎭',png:'🖼️',jpg:'🖼️',
+    gif:'🖼️',ico:'🖼️',lock:'🔒',env:'🔐',gitignore:'⑂',
+  };
+  return icons[ext] || '📄';
+}
+
+function escAttr(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/'/g, '&#x27;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\\/g, '&#x5C;')
+    .replace(/\//g, '&#x2F;')
+    .replace(/\n/g, '&#xA;')
+    .replace(/\r/g, '&#xD;')
+    .replace(/\t/g, '&#x9;');
+}
+
+async function createNewFile() {
+  const name = prompt('New file name (relative to workspace root):');
+  if (!name) return;
+  try {
+    const r = await fetch('/api/files/write', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ path: name, content: '' })
+    });
+    const d = await r.json();
+    if (d.ok) { toast('Created: ' + name, 'ok'); refreshFileTree(); openFile(name); }
+    else toast(d.error || 'Failed', 'err');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function createNewFolder() {
+  const name = prompt('New folder name (relative to workspace root):');
+  if (!name) return;
+  try {
+    const r = await fetch('/api/files/create-dir', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ path: name })
+    });
+    const d = await r.json();
+    if (d.ok) { toast('Created folder: ' + name, 'ok'); refreshFileTree(); }
+    else toast(d.error || 'Failed', 'err');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// MONACO EDITOR
+// ═══════════════════════════════════════════════════════════
+let monacoEditor = null;
+let monacoReady = null;
+let openFiles = new Map(); // path -> { content, modified, originalContent, model, language, name }
+let currentOpenFile = null;
+
+function initMonaco() {
+  // Reset if previous attempt failed
+  if (monacoReady && monacoReady._failed) {
+    monacoReady = null;
+  }
+  
+  if (monacoReady) return monacoReady;
+  monacoReady = new Promise((resolve, reject) => {
+    if (window.monaco && window.monaco.editor) {
+      setupMonacoEditor();
+      resolve(window.monaco);
+      return;
+    }
+
+    const start = () => {
+      window.require.config({ paths: { vs: '/monaco/vs' } });
+      window.MonacoEnvironment = {
+        getWorkerUrl: function () {
+          return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+            self.MonacoEnvironment = { baseUrl: '/monaco/' };
+            importScripts('/monaco/vs/base/worker/workerMain.js');
+          `)}`;
+        }
+      };
+      window.require(['vs/editor/editor.main'], function () {
+        setupMonacoEditor();
+        resolve(window.monaco);
+      }, (error) => {
+        monacoReady._failed = true;
+        reject(error);
+      });
+    };
+
+    if (window.require && window.require.config) {
+      start();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = '/monaco/vs/loader.js';
+    script.onload = start;
+    script.onerror = () => {
+      monacoReady._failed = true;
+      reject(new Error('Failed to load Monaco loader'));
+    };
+    document.head.appendChild(script);
+  });
+  return monacoReady;
+}
+
+function setupMonacoEditor() {
+  if (monacoEditor || !window.monaco) return;
+  const container = document.getElementById('monaco-container');
+  container.innerHTML = '';
+  monacoEditor = window.monaco.editor.create(container, {
+    value: '',
+    language: 'plaintext',
+    automaticLayout: true,
+    theme: 'vs-dark',
+    minimap: { enabled: true },
+    fontSize: 13,
+    lineHeight: 22,
+    tabSize: 2,
+    insertSpaces: true,
+    wordWrap: 'off',
+    smoothScrolling: true,
+    scrollBeyondLastLine: false,
+    renderWhitespace: 'selection',
+    bracketPairColorization: { enabled: true },
+    guides: { indentation: true },
+  });
+
+  monacoEditor.onDidChangeCursorPosition((e) => {
+    document.getElementById('editor-cursor').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+  });
+
+  monacoEditor.onDidChangeModelContent(() => {
+    if (!currentOpenFile) return;
+    const file = openFiles.get(currentOpenFile);
+    if (!file || !file.model) return;
+    const value = file.model.getValue();
+    file.content = value;
+    file.modified = value !== file.originalContent;
+    renderFileTabs();
+  });
+
+  // Add resize observer for container
+  const resizeObserver = new ResizeObserver(() => {
+    if (monacoEditor) {
+      setTimeout(() => monacoEditor.layout(), 0);
+    }
+  });
+  resizeObserver.observe(container);
+}
+
+function getMonacoUri(filePath) {
+  return window.monaco.Uri.parse(`file:///${filePath.replace(/\\/g, '/')}`);
+}
+
+async function openFile(filePath) {
+  // If already open, just switch to it
+  if (openFiles.has(filePath)) {
+    activateFile(filePath);
+    return;
+  }
+  try {
+    const r = await fetch('/api/files/read?path=' + encodeURIComponent(filePath));
+    const d = await r.json();
+    if (!d.ok) { toast(d.error || 'Cannot read file', 'err'); return; }
+    openFiles.set(filePath, {
+      content: d.content,
+      originalContent: d.content,
+      modified: false,
+      language: d.language || 'plaintext',
+      name: d.name,
+      model: null,
+    });
+    await initMonaco();
+    const file = openFiles.get(filePath);
+    if (file && window.monaco) {
+      file.model = window.monaco.editor.createModel(
+        file.content,
+        file.language || 'plaintext',
+        getMonacoUri(filePath),
+      );
+    }
+    renderFileTabs();
+    activateFile(filePath);
+    // Switch to editor view automatically
+    if (currentView !== 'editor') switchView('editor');
+  } catch(e) {
+    toast('Error opening file: ' + e.message, 'err');
+  }
+}
+
+async function activateFile(filePath) {
+  currentOpenFile = filePath;
+  const file = openFiles.get(filePath);
+  if (!file) return;
+
+  await initMonaco();
+
+  renderFileTabs();
+  renderEditor(file);
+
+  document.getElementById('editor-lang').textContent = file.language;
+  document.getElementById('editor-file-path').textContent = filePath;
+  if (monacoEditor) {
+    const pos = monacoEditor.getPosition();
+    document.getElementById('editor-cursor').textContent = pos
+      ? `Ln ${pos.lineNumber}, Col ${pos.column}`
+      : 'Ln 1, Col 1';
+  } else {
+    document.getElementById('editor-cursor').textContent = 'Ln 1, Col 1';
+  }
+
+  // Highlight in tree
+  document.querySelectorAll('.tree-item.active').forEach(e => e.classList.remove('active'));
+  const treeItems = document.querySelectorAll('.tree-item');
+  treeItems.forEach(ti => {
+    if (ti.title === filePath) ti.classList.add('active');
+  });
+}
+
+function renderFileTabs() {
+  const tabsEl = document.getElementById('file-tabs');
+  let html = '';
+  for (const [fpath, file] of openFiles) {
+    const active = fpath === currentOpenFile ? ' active' : '';
+    const mod = file.modified ? '<span class="modified">●</span>' : '';
+    html += `<div class="file-tab${active}" onclick="activateFile('${escAttr(fpath)}')" title="${escAttr(fpath)}">
+      <span>${escHtml(file.name)}${mod}</span>
+      <span class="close-tab" onclick="event.stopPropagation();closeFile('${escAttr(fpath)}')" title="Close">✕</span>
+    </div>`;
+  }
+  tabsEl.innerHTML = html;
+}
+
+function renderEditor(file) {
+  if (!monacoEditor || !window.monaco) return;
+  if (!file.model) {
+    file.model = window.monaco.editor.createModel(
+      file.content,
+      file.language || 'plaintext',
+      getMonacoUri(currentOpenFile || file.name),
+    );
+  }
+  monacoEditor.setModel(file.model);
+  monacoEditor.focus();
+}
+
+function closeFile(filePath) {
+  const file = openFiles.get(filePath);
+  if (file && file.modified) {
+    if (!confirm(`${filePath} has unsaved changes. Close anyway?`)) return;
+  }
+  if (file?.model) {
+    file.model.dispose();
+  }
+  openFiles.delete(filePath);
+  if (currentOpenFile === filePath) {
+    const remaining = [...openFiles.keys()];
+    if (remaining.length > 0) {
+      activateFile(remaining[remaining.length - 1]);
+    } else {
+      currentOpenFile = null;
+      if (monacoEditor) {
+        monacoEditor.setModel(null);
+        document.getElementById('monaco-container').innerHTML = '<div class="empty-state" style="height:100%"><div class="ei">📝</div><div>Open a file from the file tree to start editing</div></div>';
+        monacoEditor.dispose();
+        monacoEditor = null;
+        initMonaco().catch(() => {});
+      } else {
+        document.getElementById('monaco-container').innerHTML =
+          '<div class="empty-state" style="height:100%"><div class="ei">📝</div><div>Open a file from the file tree to start editing</div></div>';
+      }
+      document.getElementById('editor-file-path').textContent = 'No file open';
+      document.getElementById('editor-lang').textContent = 'Plaintext';
+    }
+  }
+  renderFileTabs();
+}
+
+async function saveCurrentFile() {
+  if (!currentOpenFile) { toast('No file open', 'warn'); return; }
+  const file = openFiles.get(currentOpenFile);
+  if (!file) return;
+  if (file.model) {
+    file.content = file.model.getValue();
+  }
+  try {
+    const r = await fetch('/api/files/write', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ path: currentOpenFile, content: file.content })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      file.modified = false;
+      file.originalContent = file.content;
+      renderFileTabs();
+      toast('Saved: ' + currentOpenFile, 'ok');
+    } else {
+      toast(d.error || 'Save failed', 'err');
+    }
+  } catch(e) {
+    toast('Save error: ' + e.message, 'err');
+  }
+}
+
+// Global Ctrl+S handler
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    if (currentView === 'editor' && currentOpenFile) saveCurrentFile();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// TERMINAL
+// ═══════════════════════════════════════════════════════════
+let terminalVisible = false;
+let terminalHistory = [];
+let termHistoryIdx = -1;
+
+document.getElementById('terminal-toggle-btn').addEventListener('click', toggleTerminal);
+
+function toggleTerminal() {
+  terminalVisible = !terminalVisible;
+  document.getElementById('terminal-panel').classList.toggle('show', terminalVisible);
+  document.getElementById('terminal-toggle-btn').classList.toggle('active', terminalVisible);
+  if (terminalVisible) document.getElementById('terminal-input').focus();
+}
+
+document.getElementById('terminal-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); runTerminalCommand(); }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (terminalHistory.length > 0 && termHistoryIdx < terminalHistory.length - 1) {
+      termHistoryIdx++;
+      document.getElementById('terminal-input').value = terminalHistory[terminalHistory.length - 1 - termHistoryIdx];
+    }
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (termHistoryIdx > 0) {
+      termHistoryIdx--;
+      document.getElementById('terminal-input').value = terminalHistory[terminalHistory.length - 1 - termHistoryIdx];
+    } else {
+      termHistoryIdx = -1;
+      document.getElementById('terminal-input').value = '';
+    }
+  }
+});
+
+async function runTerminalCommand() {
+  const input = document.getElementById('terminal-input');
+  const cmd = input.value.trim();
+  if (!cmd) return;
+
+  terminalHistory.push(cmd);
+  termHistoryIdx = -1;
+  input.value = '';
+
+  const output = document.getElementById('terminal-output');
+  output.innerHTML += `\n<span class="system">$ ${escHtml(cmd)}</span>\n`;
+  scrollTerminal();
+
+  try {
+    const r = await fetch('/api/terminal/exec', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ command: cmd })
+    });
+    const d = await r.json();
+    if (d.output) {
+      const cls = d.ok ? 'stdout' : 'stderr';
+      output.innerHTML += `<span class="${cls}">${escHtml(d.output)}</span>`;
+    }
+    if (d.exitCode !== 0 && d.error) {
+      output.innerHTML += `<span class="stderr">${escHtml(d.error)}</span>\n`;
+    }
+  } catch(e) {
+    output.innerHTML += `<span class="stderr">Error: ${escHtml(e.message)}</span>\n`;
+  }
+  scrollTerminal();
+  // Refresh git status if git command
+  if (cmd.startsWith('git ')) loadGitStatus();
+}
+
+function clearTerminal() {
+  document.getElementById('terminal-output').innerHTML = '<span class="system">Terminal cleared.</span>\n';
+}
+
+function scrollTerminal() {
+  const el = document.getElementById('terminal-output');
+  el.scrollTop = el.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════
+// GIT INTEGRATION
+// ═══════════════════════════════════════════════════════════
+async function loadGitStatus() {
+  const panel = document.getElementById('git-panel');
+  try {
+    const r = await fetch('/api/git/status');
+    const d = await r.json();
+    if (!d.ok) {
+      panel.innerHTML = `<div class="empty-state" style="padding:12px"><div class="ei" style="font-size:24px">⑂</div>${escHtml(d.error || 'Not a git repo')}</div>`;
+      return;
+    }
+    let html = `<div class="info-row"><span class="info-key">Branch</span><span class="info-val ok">${escHtml(d.branch)}</span></div>`;
+    html += `<div class="info-row"><span class="info-key">Changes</span><span class="info-val ${d.hasChanges?'warn':'ok'}">${d.files.length} file${d.files.length!==1?'s':''}</span></div>`;
+
+    if (d.files.length > 0) {
+      html += '<div style="margin-top:6px;max-height:120px;overflow-y:auto">';
+      for (const f of d.files.slice(0, 20)) {
+        const statusClass = f.status.includes('M') ? 'modified'
+          : f.status.includes('A') || f.status.includes('?') ? 'added'
+          : f.status.includes('D') ? 'deleted' : 'untracked';
+        html += `<div class="git-file">
+          <span class="git-status-badge ${statusClass}">${escHtml(f.status)}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f.path)}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    html += `<div style="display:flex;gap:4px;margin-top:8px">
+      <button class="feature-btn" style="font-size:10px;padding:4px 8px" onclick="openGitCommitModal()">Commit</button>
+      <button class="feature-btn" style="font-size:10px;padding:4px 8px" onclick="loadGitStatus()">Refresh</button>
+    </div>`;
+    panel.innerHTML = html;
+    renderFlowDetail();
+  } catch(e) {
+    panel.innerHTML = `<div class="empty-state" style="padding:12px"><div class="ei" style="font-size:24px">⑂</div>Git unavailable</div>`;
+  }
+}
+
+function openGitCommitModal() {
+  openModal('git-commit-modal');
+  document.getElementById('commit-msg-input').focus();
+}
+
+async function gitCommit() {
+  const msg = document.getElementById('commit-msg-input').value.trim();
+  if (!msg) { toast('Enter a commit message', 'warn'); return; }
+  const resultEl = document.getElementById('git-commit-result');
+  resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Committing…</div>';
+  try {
+    // Stage all
+    await fetch('/api/git/add', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({files:['.']})});
+    // Commit
+    const r = await fetch('/api/git/commit', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message:msg})});
+    const d = await r.json();
+    if (d.ok) {
+      resultEl.innerHTML = `<div style="color:var(--success);font-size:12px">Committed successfully!</div>
+        <div class="result-box" style="margin-top:6px;font-size:11px">${escHtml(d.result)}</div>`;
+      document.getElementById('commit-msg-input').value = '';
+      loadGitStatus();
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(d.error)}</div>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(e.message)}</div>`;
+  }
+}
+
+async function gitPush() {
+  const resultEl = document.getElementById('git-commit-result');
+  resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Pushing…</div>';
+  try {
+    const r = await fetch('/api/git/push', {method:'POST', headers:{'Content-Type':'application/json'}});
+    const d = await r.json();
+    if (d.ok) {
+      resultEl.innerHTML = `<div style="color:var(--success);font-size:12px">Pushed!</div>
+        <div class="result-box" style="margin-top:6px;font-size:11px">${escHtml(d.result)}</div>`;
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(d.error)}</div>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(e.message)}</div>`;
+  }
+}
+
+async function gitPull() {
+  const resultEl = document.getElementById('git-commit-result');
+  resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Pulling…</div>';
+  try {
+    const r = await fetch('/api/git/pull', {method:'POST', headers:{'Content-Type':'application/json'}});
+    const d = await r.json();
+    if (d.ok) {
+      resultEl.innerHTML = `<div style="color:var(--success);font-size:12px">Pulled!</div>
+        <div class="result-box" style="margin-top:6px;font-size:11px">${escHtml(d.result)}</div>`;
+      refreshFileTree();
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(d.error)}</div>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">${escHtml(e.message)}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// APPLY CODE (from AI chat to file)
+// ═══════════════════════════════════════════════════════════
+async function applyCodeToFile(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  const code = pre.textContent;
+  if (!currentOpenFile) {
+    // Prompt for file path
+    const fpath = prompt('No file is open. Enter file path to save this code to:');
+    if (!fpath) return;
+    try {
+      const r = await fetch('/api/files/write', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ path: fpath, content: code })
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast('Code written to: ' + fpath, 'ok');
+        openFile(fpath);
+        refreshFileTree();
+      } else toast(d.error, 'err');
+    } catch(e) { toast(e.message, 'err'); }
+    return;
+  }
+  // Apply to current open file
+  if (!confirm(`Replace content of ${currentOpenFile} with this code?`)) return;
+  const file = openFiles.get(currentOpenFile);
+  if (file) {
+    file.content = code;
+    file.modified = true;
+    if (file.model) {
+      file.model.setValue(code);
+    } else {
+      renderEditor(file);
+    }
+    renderFileTabs();
+    toast('Code applied to: ' + currentOpenFile, 'ok');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT ENHANCEMENTS
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// MCP / IDE TOOLS INTEGRATION
+// ═══════════════════════════════════════════════════════════
+let allTools = [];
+
+async function loadTools() {
+  const panel = document.getElementById('tools-panel');
+  if (!panel) return;
+  try {
+    const r = await fetch('/api/tools/status');
+    const d = await r.json();
+    toolsStatus = d || toolsStatus;
+    if (!d.ok || !d.available) {
+      panel.innerHTML = `<div class="empty-state" style="padding:12px"><div class="ei" style="font-size:24px">🛠️</div>IDE Controller unavailable</div>`;
+      return;
+    }
+    const r2 = await fetch('/api/tools');
+    const d2 = await r2.json();
+    if (d2.ok) {
+      allTools = d2.tools || [];
+      renderToolsPanel(allTools);
+      renderFlowDetail();
+    } else {
+      panel.innerHTML = `<div class="empty-state" style="padding:12px"><div class="ei" style="font-size:24px">🛠️</div>No tools available</div>`;
+    }
+  } catch(e) {
+    panel.innerHTML = `<div class="empty-state" style="padding:12px"><div class="ei" style="font-size:24px">🛠️</div>Failed to load tools</div>`;
+  }
+}
+
+function renderToolsPanel(tools) {
+  const panel = document.getElementById('tools-panel');
+  if (!panel) return;
+  if (!tools || tools.length === 0) {
+    panel.innerHTML = `<div class="empty-state" style="padding:12px"><div class="ei" style="font-size:24px">🛠️</div>No tools discovered</div>`;
+    return;
+  }
+  
+  // Group by category
+  const byCategory = {};
+  tools.forEach(t => {
+    const cat = t.category || 'other';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(t);
+  });
+  
+  let html = '';
+  const cats = Object.keys(byCategory).sort();
+  for (const cat of cats) {
+    const toolsInCat = byCategory[cat];
+    html += `<div style="margin-bottom:10px">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${escHtml(cat)}</div>`;
+    for (const t of toolsInCat.slice(0, 4)) {
+      const disabled = t.source === 'ide' && !toolsStatus.ideConnected;
+      html += `<button class="feature-btn" style="font-size:11px;padding:4px 8px;margin-bottom:3px" onclick="executeTool('${escAttr(t.id)}')" title="${escAttr(t.description)}">
+        ${escHtml(t.name)} ${t.source === 'mcp' ? '🔌' : '💻'}${disabled ? ' ⚠️' : ''}
+      </button>`;
+    }
+    if (toolsInCat.length > 4) {
+      html += `<div style="font-size:10px;color:var(--text-muted);padding-left:4px">+${toolsInCat.length - 4} more</div>`;
+    }
+    html += '</div>';
+  }
+  
+  html += `<div style="margin-top:8px">
+    <button class="feature-btn" style="width:100%;font-size:11px;padding:5px" onclick="openToolsModal()">🛠️ Browse All Tools (${tools.length})</button>
+  </div>`;
+  panel.innerHTML = html;
+}
+
+function openToolsModal() {
+  openModal('tools-modal');
+  renderToolsModal(allTools);
+}
+
+function renderToolsModal(tools) {
+  const list = document.getElementById('tools-list');
+  if (!tools || tools.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding:20px"><div class="ei">🛠️</div>No tools available</div>';
+    return;
+  }
+  
+  let html = '';
+  tools.forEach(t => {
+    const sourceIcon = t.source === 'mcp' ? '🔌' : '💻';
+    const cat = t.category || 'other';
+    const disabled = t.source === 'ide' && !toolsStatus.ideConnected;
+    html += `<div class="tool-item" data-category="${escAttr(cat)}" data-name="${escAttr(t.name.toLowerCase())}" data-desc="${escAttr(t.description.toLowerCase())}">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-size:12px;color:var(--text);font-weight:500">${sourceIcon} ${escHtml(t.name)}</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:1px">${escHtml(t.description)}</div>
+          <div style="display:flex;gap:6px;margin-top:3px">
+            <span style="font-size:9px;color:var(--text-muted);background:var(--border);padding:1px 6px;border-radius:8px">${escHtml(cat)}</span>
+            <span style="font-size:9px;color:var(--text-muted);background:var(--border);padding:1px 6px;border-radius:8px">${escHtml(t.source)}</span>
+            ${disabled ? '<span style="font-size:9px;color:var(--warning);background:rgba(245,158,11,.15);padding:1px 6px;border-radius:8px">needs IDE</span>' : ''}
+          </div>
+        </div>
+        <button class="modal-btn" style="font-size:10px;padding:4px 10px" onclick="executeToolModal('${escAttr(t.id)}')">Run</button>
+      </div>
+    </div>`;
+  });
+  list.innerHTML = html;
+}
+
+function filterTools(query) {
+  const q = query.toLowerCase();
+  const items = document.querySelectorAll('.tool-item');
+  items.forEach(el => {
+    const name = el.dataset.name;
+    const desc = el.dataset.desc;
+    const cat = el.dataset.category;
+    const matches = name.includes(q) || desc.includes(q) || cat.includes(q);
+    el.style.display = matches ? 'block' : 'none';
+  });
+}
+
+async function refreshTools() {
+  const resultEl = document.getElementById('tool-exec-result');
+  resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Refreshing…</div>';
+  try {
+    const r = await fetch('/api/tools');
+    const d = await r.json();
+    if (d.ok) {
+      allTools = d.tools || [];
+      renderToolsPanel(allTools);
+      renderToolsModal(allTools);
+      renderFlowDetail();
+      resultEl.innerHTML = '<div style="color:var(--success);font-size:12px">Refreshed! ' + allTools.length + ' tools</div>';
+    } else {
+      resultEl.innerHTML = '<div style="color:var(--error);font-size:12px">' + escHtml(d.error) + '</div>';
+    }
+  } catch(e) {
+    resultEl.innerHTML = '<div style="color:var(--error);font-size:12px">' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function executeTool(toolId) {
+  try {
+    const r = await fetch('/api/tools/execute', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ toolId })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast('Tool executed: ' + toolId, 'ok');
+      console.log('Tool result:', d.result);
+    } else {
+      toast((r.status === 409 ? 'Tool unavailable: ' : 'Tool failed: ') + d.error, 'err');
+    }
+  } catch(e) {
+    toast('Error: ' + e.message, 'err');
+  }
+}
+
+async function executeToolModal(toolId) {
+  const resultEl = document.getElementById('tool-exec-result');
+  resultEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Executing…</div>';
+  try {
+    const r = await fetch('/api/tools/execute', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ toolId })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const resultStr = typeof d.result === 'object' ? JSON.stringify(d.result, null, 2) : String(d.result);
+      resultEl.innerHTML = `<div style="color:var(--success);font-size:12px">✅ Executed successfully</div>
+        <div class="result-box" style="margin-top:6px;font-size:11px;max-height:200px;overflow-y:auto">${escHtml(resultStr)}</div>`;
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">❌ ${escHtml(d.error)}</div>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--error);font-size:12px">❌ ${escHtml(e.message)}</div>`;
+  }
+}
+
+// ============================================================
+// PROJECT ASSESSMENT & WORKFLOW FUNCTIONS
+// ============================================================
+
+let currentWorkflowStep = 0;
+let lastAssessment = null;
+
+async function runProjectAssessment() {
+  const resultEl = document.getElementById('assessment-result');
+  resultEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:10px">⏳</div><div>Running assessment...</div></div>';
+  
+  try {
+    const projectPath = workspaceRoot || DEFAULT_WORKSPACE_ROOT;
+    const r = await fetch('/api/assessment/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectPath })
+    });
+    
+    const d = await r.json();
+    if (d.ok) {
+      lastAssessment = d.assessment;
+      renderAssessmentResult(d.assessment);
+      toast('Assessment completed successfully', 'ok');
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--error);padding:20px;text-align:center">
+        <div style="font-size:24px;margin-bottom:10px">❌</div>
+        <div>Assessment failed: ${escHtml(d.error)}</div>
+      </div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div style="color:var(--error);padding:20px;text-align:center">
+      <div style="font-size:24px;margin-bottom:10px">❌</div>
+      <div>Error: ${escHtml(e.message)}</div>
+    </div>`;
+  }
+}
+
+function renderAssessmentResult(assessment) {
+  const resultEl = document.getElementById('assessment-result');
+  let html = '<div style="max-height:400px;overflow-y:auto">';
+  
+  // Summary
+  html += `<div style="background:var(--card);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">📊 Summary</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));gap:8px">`;
+  
+  if (assessment.summary.projectName) {
+    html += `<div><span style="font-size:10px;color:var(--text-muted)">Name:</span><br><span style="font-weight:500">${escHtml(assessment.summary.projectName)}</span></div>`;
+  }
+  
+  if (assessment.summary.projectType) {
+    html += `<div><span style="font-size:10px;color:var(--text-muted)">Type:</span><br><span style="font-weight:500">${escHtml(assessment.summary.projectType)}</span></div>`;
+  }
+  
+  if (assessment.summary.fileCount !== undefined) {
+    html += `<div><span style="font-size:10px;color:var(--text-muted)">Files:</span><br><span style="font-weight:500">${assessment.summary.fileCount}</span></div>`;
+  }
+  
+  if (assessment.summary.dependencies !== undefined) {
+    html += `<div><span style="font-size:10px;color:var(--text-muted)">Deps:</span><br><span style="font-weight:500">${assessment.summary.dependencies} prod, ${assessment.summary.devDependencies} dev</span></div>`;
+  }
+  
+  if (assessment.summary.hasTests !== undefined) {
+    html += `<div><span style="font-size:10px;color:var(--text-muted)">Tests:</span><br><span style="font-weight:500;color:${assessment.summary.hasTests ? 'var(--success)' : 'var(--warning)'}">${assessment.summary.hasTests ? 'Yes' : 'No'}</span></div>`;
+  }
+  
+  html += `</div></div>`;
+  
+  // Findings
+  if (assessment.findings && assessment.findings.length > 0) {
+    html += `<div style="background:var(--card);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">🔍 Findings (${assessment.findings.length})</div>`;
+    
+    assessment.findings.forEach(finding => {
+      const severityColor = finding.severity === 'high' ? 'var(--error)' : 
+                           finding.severity === 'medium' ? 'var(--warning)' : 'var(--text)';
+      html += `<div style="padding:8px;border-left:3px solid ${severityColor};margin-bottom:6px;background:var(--bg3)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;font-weight:500">${escHtml(finding.message)}</span>
+          <span style="font-size:9px;color:${severityColor};background:rgba(255,255,255,0.1);padding:1px 6px;border-radius:8px">${finding.severity}</span>
+        </div>
+        ${finding.recommendation ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px">💡 ${escHtml(finding.recommendation)}</div>` : ''}
+      </div>`;
+    });
+    
+    html += `</div>`;
+  }
+  
+  // Recommendations
+  if (assessment.recommendations && assessment.recommendations.length > 0) {
+    html += `<div style="background:var(--card);border-radius:var(--radius);padding:12px">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">💡 Recommendations (${assessment.recommendations.length})</div>`;
+    
+    assessment.recommendations.forEach(rec => {
+      const priorityColor = rec.priority === 'high' ? 'var(--error)' : 
+                           rec.priority === 'medium' ? 'var(--warning)' : 'var(--success)';
+      html += `<div style="padding:8px;border-left:3px solid ${priorityColor};margin-bottom:6px;background:var(--bg3)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;font-weight:500">${escHtml(rec.message)}</span>
+          <span style="font-size:9px;color:${priorityColor};background:rgba(255,255,255,0.1);padding:1px 6px;border-radius:8px">${rec.priority}</span>
+        </div>
+      </div>`;
+    });
+    
+    html += `</div>`;
+  }
+  
+  html += '</div>';
+  resultEl.innerHTML = html;
+}
+
+async function loadWorkflowSequence() {
+  const listEl = document.getElementById('workflow-sequence-list');
+  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:10px">⏳</div><div>Loading workflow...</div></div>';
+  
+  try {
+    const r = await fetch('/api/workflow/sequence');
+    const d = await r.json();
+    
+    if (d.ok) {
+      renderWorkflowSequence(d.sequence);
+    } else {
+      listEl.innerHTML = `<div style="color:var(--error);padding:20px;text-align:center">Failed to load workflow: ${escHtml(d.error)}</div>`;
+    }
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--error);padding:20px;text-align:center">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderWorkflowSequence(sequence) {
+  const listEl = document.getElementById('workflow-sequence-list');
+  let html = '<div style="max-height:400px;overflow-y:auto">';
+  
+  sequence.forEach((step, index) => {
+    const isCurrent = index === currentWorkflowStep;
+    const isCompleted = index < currentWorkflowStep;
+    
+    html += `<div style="background:var(--card);border-radius:var(--radius);padding:12px;margin-bottom:8px;border:1px solid ${isCurrent ? 'var(--primary)' : isCompleted ? 'var(--success)' : 'var(--border)'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div>
+          <span style="font-size:12px;font-weight:500;color:${isCurrent ? 'var(--primary)' : isCompleted ? 'var(--success)' : 'var(--text)'}">
+            ${isCompleted ? '✅ ' : isCurrent ? '▶️ ' : `${index + 1}. `}${escHtml(step.name)}
+          </span>
+          ${isCurrent ? '<span style="font-size:9px;color:var(--primary);background:var(--primary-dim);padding:1px 6px;border-radius:8px;margin-left:6px">Current</span>' : ''}
+        </div>
+        <button class="feature-btn" style="font-size:10px;padding:3px 8px" onclick="executeWorkflowStep('${escAttr(step.id)}')">Execute</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${escHtml(step.description)}</div>
+      <div style="font-size:10px;color:var(--text-muted)">
+        <span style="background:var(--border);padding:1px 6px;border-radius:8px;margin-right:4px">Tools: ${step.tools.join(', ')}</span>
+      </div>
+    </div>`;
+  });
+  
+  html += '</div>';
+  listEl.innerHTML = html;
+}
+
+async function executeWorkflowStep(stepId) {
+  try {
+    const projectPath = workspaceRoot || DEFAULT_WORKSPACE_ROOT;
+    const r = await fetch('/api/workflow/execute-step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stepId, projectPath })
+    });
+    
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Executed workflow step: ${d.result.stepName}`, 'ok');
+      
+      // Update current workflow step
+      const sequenceResponse = await fetch('/api/workflow/sequence');
+      const sequenceData = await sequenceResponse.json();
+      if (sequenceData.ok) {
+        const stepIndex = sequenceData.sequence.findIndex(s => s.id === stepId);
+        if (stepIndex !== -1) {
+          currentWorkflowStep = Math.max(currentWorkflowStep, stepIndex + 1);
+          renderWorkflowSequence(sequenceData.sequence);
+        }
+      }
+    } else {
+      toast(`Failed to execute step: ${d.error}`, 'err');
+    }
+  } catch (e) {
+    toast(`Error: ${e.message}`, 'err');
+  }
+}
+
+function executeCurrentWorkflowStep() {
+  // This would execute the current step based on currentWorkflowStep
+  // For now, we'll just show a message
+  toast('Use the "Execute" button on individual steps', 'info');
+}
+
+function viewWorkflowSequence() {
+  closeModal('assessment-modal');
+  openModal('workflow-modal');
+  loadWorkflowSequence();
+}
+
+async function loadMCPStatus() {
+  const listEl = document.getElementById('mcp-status-list');
+  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><div style="font-size:24px;margin-bottom:10px">⏳</div><div>Loading MCP status...</div></div>';
+  
+  try {
+    const r = await fetch('/api/mcp/status');
+    const d = await r.json();
+    
+    if (d.ok) {
+      renderMCPStatus(d.servers);
+    } else {
+      listEl.innerHTML = `<div style="color:var(--error);padding:20px;text-align:center">Failed to load MCP status: ${escHtml(d.error)}</div>`;
+    }
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--error);padding:20px;text-align:center">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderMCPStatus(servers) {
+  const listEl = document.getElementById('mcp-status-list');
+  
+  if (!servers || servers.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:10px">🔌</div><div>No MCP servers running</div></div>';
+    return;
+  }
+  
+  let html = '<div style="max-height:400px;overflow-y:auto">';
+  
+  servers.forEach(server => {
+    const statusColor = server.alive ? 'var(--success)' : 'var(--error)';
+    const statusText = server.alive ? 'Running' : 'Stopped';
+    
+    html += `<div style="background:var(--card);border-radius:var(--radius);padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:500">${escHtml(server.id)}</span>
+        <span style="font-size:9px;color:${statusColor};background:rgba(255,255,255,0.1);padding:1px 6px;border-radius:8px">${statusText}</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted)">
+        <div>PID: ${server.pid || 'N/A'}</div>
+        <div>Exit Code: ${server.exitCode || 'N/A'}</div>
+      </div>
+    </div>`;
+  });
+  
+  html += '</div>';
+  listEl.innerHTML = html;
+}
+
+// Auto-run assessment when opening a project
+async function autoRunAssessmentOnOpen() {
+  if (workspaceRoot && workspaceRoot !== DEFAULT_WORKSPACE_ROOT) {
+    // Wait a bit for everything to load
+    setTimeout(async () => {
+      try {
+        const r = await fetch('/api/assessment/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectPath: workspaceRoot })
+        });
+        
+        const d = await r.json();
+        if (d.ok) {
+          lastAssessment = d.assessment;
+          console.log('Auto-assessment completed for:', workspaceRoot);
+          
+          // Show notification if there are findings
+          if (d.assessment.findings && d.assessment.findings.length > 0) {
+            toast(`Project assessment found ${d.assessment.findings.length} issues. Click "Assess" button for details.`, 'warn');
+          }
+        }
+      } catch (e) {
+        // Silent fail for auto-assessment
+      }
+    }, 2000);
+  }
+}
+
+// Modify the openWorkspace functions to trigger auto-assessment
+const originalDoOpenWorkspace = doOpenWorkspace;
+doOpenWorkspace = async function(folderPath) {
+  await originalDoOpenWorkspace.call(this, folderPath);
+  await autoRunAssessmentOnOpen();
+};
+
+// ============================================================
+
+// Auto-load tools on startup
+loadTools();
+
+// Auto-load workspace on startup
+(async function initWorkspace() {
+  try {
+    const r = await fetch('/api/workspace');
+    const d = await r.json();
+    if (d.ok && d.root) {
+      workspaceRoot = d.root;
+      document.getElementById('workspace-name').textContent = d.root.split(/[\\/]/).pop();
+      document.getElementById('workspace-name').title = d.root;
+      document.getElementById('workspace-flow-name').textContent = d.root.split(/[\\/]/).pop();
+      document.getElementById('workspace-flow-name').title = d.root;
+      document.getElementById('file-tree-panel').classList.add('show');
+      refreshFileTree();
+      loadGitStatus();
+      renderFlowDetail();
+    }
+  } catch(_) {}
+})();
+</script>
+</body>
+</html>

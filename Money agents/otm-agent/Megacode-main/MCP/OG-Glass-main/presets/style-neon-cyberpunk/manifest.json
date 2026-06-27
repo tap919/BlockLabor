@@ -1,0 +1,12 @@
+{
+  "id": "style-neon-cyberpunk",
+  "name": "Neon Cyberpunk",
+  "description": "Pitch-dark backgrounds with vivid neon accents, monospace type, and glowing borders. High-tech dystopian aesthetic.",
+  "version": "1.0.0",
+  "extends": "glassmorphic-base",
+  "tags": ["style", "neon", "cyberpunk", "dark", "glow", "terminal"],
+  "styleCategory": "cyberpunk",
+  "designPrinciples": ["neon-glow", "dark-substrate", "monospace-first", "high-contrast", "electric-accents"],
+  "components": [],
+  "layouts": []
+}

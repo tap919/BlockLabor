@@ -1,0 +1,20 @@
+{
+  "name": "Sidebar",
+  "category": "shell",
+  "description": "Collapsible glassmorphic sidebar with NavGroup support",
+  "propsSchema": {
+    "collapsed": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Whether the sidebar is collapsed to icon-only mode"
+    },
+    "onToggle": {
+      "type": "function",
+      "required": false,
+      "description": "Callback when collapse toggle is clicked"
+    }
+  },
+  "template": "import React from 'react';\nimport { NavGroup } from '@/components/preset';\n\ninterface SidebarProps {\n  collapsed?: boolean;\n  onToggle?: () => void;\n  children?: React.ReactNode;\n}\n\nexport function Sidebar({ collapsed = false, onToggle, children }: SidebarProps) {\n  return (\n    <aside\n      style={{\n        width: collapsed ? '{{token:spacing.sidebar.collapsedWidth}}' : '{{token:spacing.sidebar.width}}',\n        transition: '{{token:animation.transition.sidebar}}',\n        backdropFilter: '{{token:blur.elevation.2}}',\n        background: '{{token:colors.base.surface}}',\n        borderRight: `1px solid {{token:colors.base.border}}`,\n        padding: '{{token:spacing.sidebar.padding}}',\n        height: '100vh',\n        display: 'flex',\n        flexDirection: 'column',\n        overflow: 'hidden',\n      }}\n    >\n      {children}\n    </aside>\n  );\n}\n",
+  "cssModule": ".sidebar {\n  width: var(--sidebar-width);\n  transition: var(--transition-sidebar);\n  backdrop-filter: var(--blur-elevation-2);\n  background: var(--color-surface);\n  border-right: 1px solid var(--color-border);\n  padding: var(--sidebar-padding);\n  height: 100vh;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.sidebar--collapsed {\n  width: var(--sidebar-collapsed-width);\n}\n"
+}
